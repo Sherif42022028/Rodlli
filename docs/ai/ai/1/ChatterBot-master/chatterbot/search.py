@@ -1,0 +1,250 @@
+class IndexedTextSearch:
+    """
+    :param statement_comparison_function: A comparison class.
+        Defaults to ``LevenshteinDistance``.
+
+    :param search_page_size:
+        The maximum number of records to load into memory at a time when searching.
+        Defaults to 1000
+    """
+
+    name = 'indexed_text_search'
+
+    def __init__(self, chatbot, **kwargs):
+        from chatterbot.comparisons import LevenshteinDistance
+
+        self.chatbot = chatbot
+
+        statement_comparison_function = kwargs.get(
+            'statement_comparison_function',
+            LevenshteinDistance
+        )
+
+        self.compare_statements = statement_comparison_function(
+            language=self.chatbot.tagger.language
+        )
+
+        self.search_page_size = kwargs.get(
+            'search_page_size', 1000
+        )
+
+    def search(self, input_statement, **additional_parameters):
+        """
+        Search for close matches to the input. Confidence scores for
+        subsequent results will order of increasing value.
+
+        :param input_statement: A statement.
+        :type input_statement: chatterbot.conversation.Statement
+
+        :param **additional_parameters: Additional parameters to be passed
+            to the ``filter`` method of the storage adapter when searching.
+
+        :rtype: Generator yielding one closest matching statement at a time.
+        """
+        self.chatbot.logger.info('Beginning search for close text match')
+
+        search_parameters = {
+            'search_in_response_to_contains': input_statement.search_text,
+            'persona_not_startswith': 'bot:',
+            'page_size': self.search_page_size
+        }
+
+        if additional_parameters:
+            search_parameters.update(additional_parameters)
+
+        statement_list = self.chatbot.storage.filter(**search_parameters)
+
+        best_confidence_so_far = 0
+
+        self.chatbot.logger.info('Processing search results')
+
+        # Find the closest matching known statement
+        for statement in statement_list:
+            confidence = self.compare_statements.compare_text(
+                input_statement.text, statement.in_response_to
+            )
+
+            if confidence > best_confidence_so_far:
+                best_confidence_so_far = confidence
+                statement.confidence = confidence
+
+                self.chatbot.logger.info('Similar text found: {} {}'.format(
+                    statement.in_response_to, confidence
+                ))
+
+                yield statement
+
+                if confidence >= 1.0:
+                    self.chatbot.logger.info('Exact match found, stopping search')
+                    break
+
+
+class TextSearch:
+    """
+    :param statement_comparison_function: A comparison class.
+        Defaults to ``LevenshteinDistance``.
+
+    :param search_page_size:
+        The maximum number of records to load into memory at a time when searching.
+        Defaults to 1000
+    """
+
+    name = 'text_search'
+
+    def __init__(self, chatbot, **kwargs):
+        from chatterbot.comparisons import LevenshteinDistance
+
+        self.chatbot = chatbot
+
+        statement_comparison_function = kwargs.get(
+            'statement_comparison_function',
+            LevenshteinDistance
+        )
+
+        self.compare_statements = statement_comparison_function(
+            language=self.chatbot.tagger.language
+        )
+
+        self.search_page_size = kwargs.get(
+            'search_page_size', 1000
+        )
+
+    def search(self, input_statement, **additional_parameters):
+        """
+        Search for close matches to the input. Confidence scores for
+        subsequent results will order of increasing value.
+
+        :param input_statement: A statement.
+        :type input_statement: chatterbot.conversation.Statement
+
+        :param **additional_parameters: Additional parameters to be passed
+            to the ``filter`` method of the storage adapter when searching.
+
+        :rtype: Generator yielding one closest matching statement at a time.
+        """
+        self.chatbot.logger.info('Beginning search for close text match')
+
+        search_parameters = {
+            'persona_not_startswith': 'bot:',
+            'page_size': self.search_page_size
+        }
+
+        if additional_parameters:
+            search_parameters.update(additional_parameters)
+
+        statement_list = self.chatbot.storage.filter(**search_parameters)
+
+        best_confidence_so_far = 0
+
+        self.chatbot.logger.info('Processing search results')
+
+        # Find the closest matching known statement
+        for statement in statement_list:
+            confidence = self.compare_statements.compare_text(
+                input_statement.text, statement.in_response_to
+            )
+
+            if confidence > best_confidence_so_far:
+                best_confidence_so_far = confidence
+                statement.confidence = confidence
+
+                self.chatbot.logger.info('Similar text found: {} {}'.format(
+                    statement.text, confidence
+                ))
+
+                yield statement
+
+                if confidence >= 1.0:
+                    self.chatbot.logger.info('Exact match found, stopping search')
+                    break
+
+
+class SemanticVectorSearch:
+    """
+    Semantic vector search for storage adapters that use vector embeddings.
+    Does not require a tagger or comparison function - relies on the storage
+    adapter's native vector similarity search capabilities.
+
+    This search algorithm is designed for vector-based storage adapters like
+    RedisVectorStorageAdapter. Unlike indexed text search (IndexedTextSearch)
+    which uses string matching and requires a two-phase search, semantic vector
+    search finds the best matching response in a single phase using vector
+    similarity.
+
+    Architecture differences:
+    -------------------------
+    Indexed Text Search (SQL adapters):
+    - Phase 1: Find statements with string similarity to input
+    - Phase 2: Find variations of the match to get diverse responses
+    - Requires search_text and search_in_response_to indexed fields
+    - Uses comparison functions (Levenshtein, Jaccard, etc.)
+
+    Semantic Vector Search (Redis adapter):
+    - Single phase: Find statements with vector similarity to input
+    - Semantic embeddings capture contextual meaning
+    - No need for Phase 2 - vector similarity already provides the best match
+    - Does not use search_text/search_in_response_to fields
+    - Confidence scores based on cosine distance in vector space
+
+    :param search_page_size:
+        The maximum number of records to load into memory at a time when searching.
+        Defaults to 1000
+    """
+
+    name = 'semantic_vector_search'
+
+    def __init__(self, chatbot, **kwargs):
+        self.chatbot = chatbot
+
+        self.search_page_size = kwargs.get(
+            'search_page_size', 1000
+        )
+
+    def search(self, input_statement, **additional_parameters):
+        """
+        Search for semantically similar statements using vector similarity.
+        Confidence scores are calculated by the storage adapter based on
+        vector distances and returned in the results.
+
+        :param input_statement: A statement.
+        :type input_statement: chatterbot.conversation.Statement
+
+        :param **additional_parameters: Additional parameters to be passed
+            to the ``filter`` method of the storage adapter when searching.
+
+        :rtype: Generator yielding one closest matching statement at a time.
+        """
+        self.chatbot.logger.info('Beginning semantic vector search')
+
+        search_parameters = {
+            'search_in_response_to_contains': input_statement.text,
+            'persona_not_startswith': 'bot:',
+            'page_size': self.search_page_size
+        }
+
+        if additional_parameters:
+            search_parameters.update(additional_parameters)
+
+        statement_list = self.chatbot.storage.filter(**search_parameters)
+
+        best_confidence_so_far = 0
+
+        self.chatbot.logger.info('Processing search results')
+
+        # Yield statements with confidence scores from vector similarity
+        for statement in statement_list:
+            # Confidence is set by the storage adapter during filter()
+            confidence = statement.confidence
+
+            if confidence > best_confidence_so_far:
+                best_confidence_so_far = confidence
+
+                self.chatbot.logger.info('Similar statement found: {} {}'.format(
+                    statement.in_response_to, confidence
+                ))
+
+                yield statement
+
+                if confidence >= 1.0:
+                    self.chatbot.logger.info('Exact match found, stopping search')
+                    break

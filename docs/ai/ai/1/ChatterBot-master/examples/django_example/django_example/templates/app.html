@@ -1,0 +1,136 @@
+{% load static %}
+<!doctype html>
+<html>
+  <head>
+    <title>Django ChatterBot Example</title>
+    <link rel="shortcut icon" href="{% static 'favicon.ico' %}"/>
+    <link rel="stylesheet" href="{% static 'css/bootstrap.css' %}"/>
+    <link rel="stylesheet" href="{% static 'css/custom.css' %}"/>
+  </head>
+  <body>
+
+    {% include 'nav.html' %}
+
+    <div class="container mt-3 pt-3">
+
+      <div class="jumbotron mt-3">
+        <h1 class="jumbotron-heading text-center">Django ChatterBot Example</h1>
+        <p class="lead text-center">
+          This is a web app that allows you to talk to ChatterBot.
+        </p>
+
+        <hr class="my-2">
+
+        <div class="row">
+          <div class="col-lg-6 offset-lg-3">
+            <div class="list-group chat-log js-chat-log"></div>
+
+            <div class="input-group input-group-lg mt-2">
+              <input type="text" class="form-control js-text" placeholder="Type something to begin..."/>
+              <div class="input-group-append">
+                <button class="btn btn-primary js-say">Submit</button>
+              </span>
+            </div>
+            
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+
+    <script src="{% static 'js/jquery.js' %}"></script>
+    <script src="{% static 'js/js.cookie.js' %}"></script>
+    <script src="{% static 'js/bootstrap.js' %}"></script>
+    <script>
+      var chatterbotUrl = '{% url "chatterbot" %}';
+      var csrftoken = Cookies.get('csrftoken');
+
+      function csrfSafeMethod(method) {
+        // these HTTP methods do not require CSRF protection
+        return (/^(GET|HEAD|OPTIONS|TRACE)$/.test(method));
+      }
+
+      $.ajaxSetup({
+        beforeSend: function(xhr, settings) {
+          if (!csrfSafeMethod(settings.type) && !this.crossDomain) {
+            xhr.setRequestHeader("X-CSRFToken", csrftoken);
+          }
+        }
+      });
+
+      var $chatlog = $('.js-chat-log');
+      var $input = $('.js-text');
+      var $sayButton = $('.js-say');
+
+      function createRow(text) {
+        var $row = $('<div class="list-group-item"></div>');
+
+        $row.html(text);
+        $chatlog.append($row);
+
+        return $row;
+      }
+
+      function submitInput() {
+        var inputData = {
+          'text': $input.val()
+        }
+
+        // Display the user's input on the web page
+        createRow(inputData.text);
+
+        // Clear the input field
+        $input.val('');
+
+        // Add a loading indicator
+        var $loadingRow = createRow(
+          `
+          <div class="d-flex justify-content-center">
+            <div class="spinner-border text-success" role="status">
+              <span class="sr-only">Loading...</span>
+            </div>
+          </div>
+          `
+        );
+
+        var $submit = $.ajax({
+          type: 'POST',
+          url: chatterbotUrl,
+          data: JSON.stringify(inputData),
+          contentType: 'application/json'
+        });
+
+        $submit.done(function(statement) {
+
+            // RReplace the loading indicator with the bot's response
+            $loadingRow.html('');
+            $loadingRow.text(statement.text);
+
+            // Scroll to the bottom of the chat interface
+            $chatlog[0].scrollTop = $chatlog[0].scrollHeight;
+        });
+
+        $submit.fail(function(jqXHR, textStatus, errorThrown) {
+            // Handle the error
+
+            $loadingRow.html('An error occurred while processing your request. Check console for details.');
+            $loadingRow.addClass('list-group-item-danger');
+
+            console.error('Error:', textStatus, errorThrown);
+        });
+      }
+
+      $sayButton.click(function() {
+        submitInput();
+      });
+
+      $input.keydown(function(event) {
+        // Submit the input when the enter button is pressed
+        if (event.keyCode == 13) {
+          submitInput();
+        }
+      });
+    </script>
+  </body>
+</html>

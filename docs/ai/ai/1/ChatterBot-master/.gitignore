@@ -1,0 +1,23 @@
+bin
+build
+html
+dist
+venv
+.env
+.out
+.coverage
+.python-version
+*.pyc
+*.swp
+*.egg-info
+*.egg/*
+*.eggs/*
+*.doctrees
+
+# Database files
+.database
+*.sqlite3
+*.sqlite3-*
+
+# IDE files
+.vscode
