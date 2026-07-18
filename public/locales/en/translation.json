@@ -1,0 +1,57 @@
+{
+  "nav": {
+    "home": "Home",
+    "about": "About",
+    "pricing": "Pricing",
+    "contact": "Contact",
+    "signUp": "Sign Up / Log in",
+    "signOut": "Sign Out"
+  },
+  "hero": {
+    "title": "A Smart Chatbot for Merchants and Shoppers",
+    "subtitle": "Streamline your shopping experience with our intelligent chatbot.",
+    "cta": "Get Started",
+    "demo": "Watch chat demo"
+  },
+  "merchant": {
+    "hubTitle": "Welcome to Your Merchant Hub",
+    "hubSubtitle": "Manage your chatbot, update your business data, and connect with customers in real time.",
+    "businessInfo": "General Business Information",
+    "businessName": "Business Name",
+    "category": "Business Category",
+    "description": "Short Description",
+    "contactDetails": "Contact Details",
+    "storeAddress": "Store Address",
+    "phone": "Phone Number",
+    "website": "Website URL",
+    "serviceDetails": "Service Details",
+    "productName": "Product Name",
+    "price": "Price",
+    "workingHours": "Working Hours",
+    "faq": "Frequently Asked Questions",
+    "createAccount": "Create Account",
+    "next": "Next",
+    "copyLink": "Copy Link",
+    "inviteTitle": "Invite Customers to Chat",
+    "inviteSubtitle": "Share this link so visitors can start talking to your business right away."
+  },
+  "buyer": {
+    "welcome": "Welcome, Shopper!",
+    "subtitle": "Access chatbots, browse categories, and discover new deals.",
+    "fullName": "Full Name",
+    "email": "Email Address",
+    "password": "Password",
+    "phone": "Phone Number",
+    "discover": "Discover More",
+    "search": "Search stores, Categories...",
+    "popularCategories": "Popular Categories",
+    "trendingStores": "Trending Stores",
+    "online": "Online"
+  },
+  "chat": {
+    "placeholder": "Type a message...",
+    "online": "Online",
+    "botName": "My Chat Bot",
+    "discoverMore": "Discover More"
+  }
+}

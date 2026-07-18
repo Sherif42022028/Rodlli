@@ -1,8 +1,10 @@
 -- ============================================
--- 1. PROFILES (extends Supabase auth.users)
+-- 1. PROFILES (Stores NextAuth users & type information)
 -- ============================================
 CREATE TABLE IF NOT EXISTS profiles (
-    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    email TEXT UNIQUE NOT NULL,
+    password TEXT NOT NULL, -- Hashed password
     full_name TEXT,
     phone_number TEXT,
     avatar_url TEXT,
@@ -25,6 +27,9 @@ CREATE TABLE IF NOT EXISTS merchants (
     website_url TEXT,
     chatbot_link TEXT UNIQUE, -- /merchant/slug
     slug TEXT UNIQUE,
+    bot_avatar_url TEXT, -- Bot icon image URL
+    category_id UUID REFERENCES categories(id) ON DELETE SET NULL,
+    is_online BOOLEAN DEFAULT true,
     is_active BOOLEAN DEFAULT true,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -143,36 +148,13 @@ CREATE TABLE IF NOT EXISTS trending_stores (
 );
 
 -- ============================================
--- RLS POLICIES
+-- 12. UNANSWERED_QUESTIONS
 -- ============================================
-ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE merchants ENABLE ROW LEVEL SECURITY;
-ALTER TABLE products ENABLE ROW LEVEL SECURITY;
-ALTER TABLE conversations ENABLE ROW LEVEL SECURITY;
-ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
-
--- Profiles: Users can read/update their own
-CREATE POLICY "Users can view own profile"
-    ON profiles FOR SELECT USING (auth.uid() = id);
-
-CREATE POLICY "Users can update own profile"
-    ON profiles FOR UPDATE USING (auth.uid() = id);
-
--- Merchants: Public read, owner write
-CREATE POLICY "Merchants public read"
-    ON merchants FOR SELECT USING (true);
-
-CREATE POLICY "Merchants owner write"
-    ON merchants FOR ALL USING (auth.uid() = profile_id);
-
--- Messages: Participants only
-CREATE POLICY "Messages participants"
-    ON messages FOR SELECT USING (
-        EXISTS (
-            SELECT 1 FROM conversations c
-            WHERE c.id = messages.conversation_id
-            AND (c.buyer_id = auth.uid() OR c.merchant_id IN (
-                SELECT id FROM merchants WHERE profile_id = auth.uid()
-            ))
-        )
-    );
+CREATE TABLE IF NOT EXISTS unanswered_questions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    merchant_id UUID REFERENCES merchants(id) ON DELETE CASCADE,
+    question_text TEXT NOT NULL,
+    conversation_id UUID REFERENCES conversations(id) ON DELETE SET NULL,
+    is_resolved BOOLEAN DEFAULT false,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
