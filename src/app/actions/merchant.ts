@@ -22,7 +22,7 @@ export async function getMerchantByProfileId(profileId: string) {
 
 // 2. Upsert Merchant (Onboarding Step 1)
 export async function upsertMerchant(data: Record<string, any>, profileId: string) {
-  const { businessName, businessCategory, shortDescription, storeAddress, businessPhone, websiteUrl, botAvatarUrl } = data
+  const { businessName, businessCategory, categoryId, shortDescription, storeAddress, businessPhone, websiteUrl, botAvatarUrl, onboardingStep } = data
 
   if (!businessName || !businessCategory) {
     return { error: 'Business name and category are required' }
@@ -41,6 +41,7 @@ export async function upsertMerchant(data: Record<string, any>, profileId: strin
         sql`UPDATE merchants 
             SET business_name = ${businessName}, 
                 business_category = ${businessCategory}, 
+                category_id = ${categoryId || null},
                 short_description = ${shortDescription || null}, 
                 store_address = ${storeAddress || null}, 
                 business_phone = ${businessPhone || null}, 
@@ -48,6 +49,7 @@ export async function upsertMerchant(data: Record<string, any>, profileId: strin
                 bot_avatar_url = ${botAvatarUrl || null}, 
                 slug = ${slug}, 
                 chatbot_link = ${chatbotLink},
+                onboarding_step = ${onboardingStep !== undefined ? onboardingStep : existing.onboarding_step},
                 updated_at = NOW()
             WHERE profile_id = ${profileId}`
       )
@@ -55,14 +57,27 @@ export async function upsertMerchant(data: Record<string, any>, profileId: strin
     } else {
       // Insert
       await db.execute(
-        sql`INSERT INTO merchants (profile_id, business_name, business_category, short_description, store_address, business_phone, website_url, slug, chatbot_link, bot_avatar_url)
-            VALUES (${profileId}, ${businessName}, ${businessCategory}, ${shortDescription || null}, ${storeAddress || null}, ${businessPhone || null}, ${websiteUrl || null}, ${slug}, ${chatbotLink}, ${botAvatarUrl || null})`
+        sql`INSERT INTO merchants (profile_id, business_name, business_category, category_id, short_description, store_address, business_phone, website_url, slug, chatbot_link, bot_avatar_url, onboarding_step)
+            VALUES (${profileId}, ${businessName}, ${businessCategory}, ${categoryId || null}, ${shortDescription || null}, ${storeAddress || null}, ${businessPhone || null}, ${websiteUrl || null}, ${slug}, ${chatbotLink}, ${botAvatarUrl || null}, ${onboardingStep || 1})`
       )
       return { success: true, slug }
     }
   } catch (error: any) {
     console.error('upsertMerchant error:', error)
     return { error: error.message || 'Failed to save business details' }
+  }
+}
+
+// 2.5 Update Onboarding Step
+export async function updateOnboardingStep(merchantId: string, step: number) {
+  try {
+    await db.execute(
+      sql`UPDATE merchants SET onboarding_step = ${step}, updated_at = NOW() WHERE id = ${merchantId}`
+    )
+    return { success: true }
+  } catch (error: any) {
+    console.error('updateOnboardingStep error:', error)
+    return { error: error.message || 'Failed to update onboarding step' }
   }
 }
 

@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS merchants (
     slug TEXT UNIQUE,
     bot_avatar_url TEXT, -- Bot icon image URL
     category_id UUID REFERENCES categories(id) ON DELETE SET NULL,
+    onboarding_step INTEGER DEFAULT 1,
     is_online BOOLEAN DEFAULT true,
     is_active BOOLEAN DEFAULT true,
     created_at TIMESTAMPTZ DEFAULT NOW(),

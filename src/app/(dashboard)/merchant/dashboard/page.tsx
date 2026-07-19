@@ -14,8 +14,9 @@ export default async function MerchantDashboardPage() {
   const merchant = await getMerchantByProfileId(user.id)
 
   // Redirect to onboarding if not done yet
-  if (!merchant) {
-    redirect('/merchant/onboarding')
+  if (!merchant || !merchant.onboarding_step || merchant.onboarding_step < 4) {
+    const step = merchant?.onboarding_step || 1
+    redirect(`/onboarding/${step}`)
   }
 
   // Fetch all related data

@@ -5,8 +5,8 @@ export default auth((req) => {
   const isLoggedIn = !!req.auth
   const url = req.nextUrl.clone()
 
-  // Protect dashboard routes
-  if (url.pathname.startsWith('/merchant') || url.pathname.startsWith('/buyer')) {
+  // Protect dashboard and onboarding routes
+  if (url.pathname.startsWith('/merchant') || url.pathname.startsWith('/buyer') || url.pathname.startsWith('/onboarding')) {
     if (!isLoggedIn) {
       url.pathname = '/login'
       return NextResponse.redirect(url)
