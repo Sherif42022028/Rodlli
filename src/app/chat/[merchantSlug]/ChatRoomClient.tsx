@@ -153,7 +153,7 @@ export default function ChatRoomClient({
   }
 
   return (
-    <div className="min-h-screen bg-cream-50 text-dark-900 font-sans flex flex-col">
+    <div className="h-screen bg-cream-50 text-dark-900 font-sans flex flex-col overflow-hidden">
       {/* Top Header */}
       <header className="h-16 bg-white border-b border-dark-100 flex items-center justify-between px-6 shrink-0 sticky top-0 z-30">
         <div className="flex items-center gap-3">
