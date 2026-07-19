@@ -358,7 +358,7 @@ export default function ChatRoomClient({
         <section className="flex-1 flex flex-col bg-cream-50/50 overflow-hidden relative">
           {/* Message List */}
           <div className="flex-1 overflow-y-auto">
-            <div className="max-w-2xl mx-auto px-4 py-6 space-y-4 w-full">
+            <div className="max-w-5xl mx-auto px-4 py-6 space-y-4 w-full">
               {messages.map((m) => (
                 <div 
                   key={m.id} 
@@ -469,7 +469,7 @@ export default function ChatRoomClient({
           {/* Quick Replies Panel */}
           {messages.length > 0 && messages[messages.length - 1].sender === 'bot' && messages[messages.length - 1].quickReplies && (
             <div className="px-6 py-2 shrink-0 z-10">
-              <div className="max-w-2xl mx-auto w-full flex flex-wrap gap-2 justify-center">
+              <div className="max-w-5xl mx-auto w-full flex flex-wrap gap-2 justify-center">
                 {messages[messages.length - 1].quickReplies?.map((qr, idx) => (
                   <button
                     key={idx}
@@ -485,7 +485,7 @@ export default function ChatRoomClient({
 
           {/* Chat Input Bar */}
           <div className="p-4 bg-white border-t border-dark-100 shrink-0">
-            <div className="max-w-2xl mx-auto w-full flex gap-2">
+            <div className="max-w-5xl mx-auto w-full flex gap-2">
               <input
                 type="text"
                 value={inputText}
