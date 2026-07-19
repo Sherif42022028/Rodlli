@@ -2,6 +2,7 @@
 
 import { db } from '@/lib/db'
 import { sql } from 'drizzle-orm'
+import { INTEREST_WEIGHTS } from '@/lib/constants'
 
 // 1. Get Categories with dynamic store counts
 export async function getCategories() {
@@ -192,5 +193,70 @@ export async function createContactRequest(merchantId: string, conversationId: s
   } catch (error: any) {
     console.error('createContactRequest error:', error)
     return { error: error.message || 'Failed to create contact request' }
+  }
+}
+
+
+
+// 9. Increment Buyer Interest score
+export async function incrementInterest(buyerId: string | null | undefined, categoryId: string | null | undefined, weight: number) {
+  if (!buyerId || !categoryId) return { success: false }
+  try {
+    await db.execute(
+      sql`INSERT INTO buyer_interests (buyer_id, category_id, score)
+          VALUES (${buyerId}, ${categoryId}, ${weight})
+          ON CONFLICT (buyer_id, category_id)
+          DO UPDATE SET 
+            score = LEAST(${INTEREST_WEIGHTS.MAX_SCORE_PER_CATEGORY}, buyer_interests.score + ${weight}),
+            updated_at = NOW()`
+    )
+    return { success: true }
+  } catch (error) {
+    console.error('incrementInterest error:', error)
+    return { error: 'Failed to increment buyer interest' }
+  }
+}
+
+// 10. Save multiple buyer interests at signup
+export async function saveBuyerSignupInterests(buyerId: string, categoryIds: string[]) {
+  if (!buyerId || !categoryIds || categoryIds.length === 0) return { success: true }
+  try {
+    for (const catId of categoryIds) {
+      await db.execute(
+        sql`INSERT INTO buyer_interests (buyer_id, category_id, score)
+            VALUES (${buyerId}, ${catId}, ${INTEREST_WEIGHTS.SIGNUP_SELECTION})
+            ON CONFLICT (buyer_id, category_id)
+            DO UPDATE SET 
+              score = LEAST(${INTEREST_WEIGHTS.MAX_SCORE_PER_CATEGORY}, buyer_interests.score + ${INTEREST_WEIGHTS.SIGNUP_SELECTION}),
+              updated_at = NOW()`
+      )
+    }
+    return { success: true }
+  } catch (error) {
+    console.error('saveBuyerSignupInterests error:', error)
+    return { error: 'Failed to save signup interests' }
+  }
+}
+
+// 11. Get Recommended Stores based on Buyer Interest score
+export async function getRecommendedStores(buyerId: string | null | undefined, limit: number = 6) {
+  if (!buyerId) return []
+  try {
+    const result = await db.execute(
+      sql`SELECT m.id, m.business_name, m.business_category, m.short_description, m.slug, m.bot_avatar_url, m.is_online,
+                 c.name_en as category_name_en, c.name_ar as category_name_ar, bi.score
+          FROM merchants m
+          JOIN buyer_interests bi ON bi.category_id = m.category_id
+          LEFT JOIN categories c ON c.id = m.category_id
+          WHERE bi.buyer_id = ${buyerId} 
+            AND m.is_active = true 
+            AND bi.score > 0
+          ORDER BY bi.score DESC, m.created_at DESC
+          LIMIT ${limit}`
+    )
+    return result.rows as unknown as any[]
+  } catch (error) {
+    console.error('getRecommendedStores error:', error)
+    return []
   }
 }

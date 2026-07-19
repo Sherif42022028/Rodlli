@@ -4,16 +4,18 @@ import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useTranslation } from '@/components/layout/I18nProvider'
 import { getStores } from '@/app/actions/buyer'
-import { Search, ShoppingBag, Store, ArrowRight, Bot, Compass } from 'lucide-react'
+import { Search, ShoppingBag, Store, ArrowRight, Bot, Compass, Sparkles } from 'lucide-react'
 
 export default function BuyerDashboardClient({
   categories,
   trendingStores,
-  initialStores
+  initialStores,
+  recommendedStores = []
 }: {
   categories: any[]
   trendingStores: any[]
   initialStores: any[]
+  recommendedStores?: any[]
 }) {
   const { language } = useTranslation()
 
@@ -170,14 +172,53 @@ export default function BuyerDashboardClient({
           )}
         </div>
 
-        {/* Right Column: Trending Stores Panel */}
-        <div className="space-y-4">
-          <h3 className="text-lg font-bold text-dark-950 flex items-center gap-2">
-            <ShoppingBag className="w-5 h-5 text-primary-500" />
-            {language === 'en' ? 'Trending Stores' : 'المتاجر الرائجة'}
-          </h3>
+        {/* Right Column: Recommended & Trending Panel */}
+        <div className="space-y-6">
+          {/* Recommended Section (Optional: only displayed if interests score exists) */}
+          {recommendedStores && recommendedStores.length > 0 && (
+            <div className="space-y-4 animate-fade-in">
+              <h3 className="text-lg font-bold text-dark-950 flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-primary-500" />
+                {language === 'en' ? 'Recommended for You' : 'مقترح لك'}
+              </h3>
 
-          <div className="bg-white border border-dark-100 rounded-3xl p-5 space-y-4 shadow-sm">
+              <div className="bg-white border border-dark-100 rounded-3xl p-5 space-y-4 shadow-sm">
+                {recommendedStores.map((s) => (
+                  <Link 
+                    key={s.id}
+                    href={`/chat/${s.slug}`}
+                    className="flex items-center gap-3.5 p-2 rounded-xl hover:bg-cream-50 transition-colors group"
+                  >
+                    <div className="w-10 h-10 rounded-lg overflow-hidden bg-cream-50 flex items-center justify-center shrink-0 border border-dark-100">
+                      {s.bot_avatar_url ? (
+                        <img src={s.bot_avatar_url} alt={s.business_name} className="w-full h-full object-cover" />
+                      ) : (
+                        <Bot className="w-5 h-5 text-dark-500" />
+                      )}
+                    </div>
+                    <div className="overflow-hidden flex-1">
+                      <h4 className="font-bold text-xs text-dark-950 group-hover:text-primary-500 truncate leading-tight transition-colors">
+                        {s.business_name}
+                      </h4>
+                      <span className="text-[9px] text-dark-500">
+                        {language === 'en' ? s.category_name_en : s.category_name_ar}
+                      </span>
+                    </div>
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block shrink-0" />
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Trending Stores Section */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-bold text-dark-950 flex items-center gap-2">
+              <ShoppingBag className="w-5 h-5 text-primary-500" />
+              {language === 'en' ? 'Trending Stores' : 'المتاجر الرائجة'}
+            </h3>
+
+            <div className="bg-white border border-dark-100 rounded-3xl p-5 space-y-4 shadow-sm">
             {trendingStores.length === 0 ? (
               <p className="text-xs text-dark-500 italic">No trending stores currently.</p>
             ) : (
@@ -210,5 +251,6 @@ export default function BuyerDashboardClient({
         </div>
       </div>
     </div>
+  </div>
   )
 }

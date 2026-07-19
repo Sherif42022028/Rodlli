@@ -1,7 +1,7 @@
 import React from 'react'
 import { redirect } from 'next/navigation'
 import { auth } from '@/lib/auth'
-import { getCategories, getTrendingStores, getStores } from '@/app/actions/buyer'
+import { getCategories, getTrendingStores, getStores, getRecommendedStores } from '@/app/actions/buyer'
 import BuyerDashboardClient from './BuyerDashboardClient'
 
 export default async function BuyerDashboardPage() {
@@ -10,10 +10,13 @@ export default async function BuyerDashboardPage() {
     redirect('/login')
   }
 
+  const user = session.user as { id: string }
+
   // Fetch initial data
   const categories = await getCategories()
   const trendingStores = await getTrendingStores()
   const initialStores = await getStores()
+  const recommendedStores = await getRecommendedStores(user.id)
 
   return (
     <div className="space-y-8">
@@ -30,6 +33,7 @@ export default async function BuyerDashboardPage() {
         categories={categories}
         trendingStores={trendingStores}
         initialStores={initialStores}
+        recommendedStores={recommendedStores}
       />
     </div>
   )

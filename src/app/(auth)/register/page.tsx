@@ -5,8 +5,9 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslation } from '@/components/layout/I18nProvider'
 import { registerUser } from '@/app/actions/auth'
+import { getCategories } from '@/app/actions/buyer'
 import { signIn } from 'next-auth/react'
-import { Bot, Mail, Lock, User, Phone, Store, ShoppingBag, AlertCircle, ArrowLeft, Globe } from 'lucide-react'
+import { Bot, Mail, Lock, User, Phone, Store, ShoppingBag, AlertCircle, ArrowLeft, Globe, Tag } from 'lucide-react'
 
 export default function Register() {
   const { language, changeLanguage, t } = useTranslation()
@@ -22,6 +23,19 @@ export default function Register() {
   // Merchant Extra Field
   const [businessName, setBusinessName] = useState('')
   const [businessCategory, setBusinessCategory] = useState('')
+
+  // Buyer Category Selection Extra Field
+  const [categories, setCategories] = useState<any[]>([])
+  const [selectedInterests, setSelectedInterests] = useState<string[]>([])
+
+  // Load categories
+  React.useEffect(() => {
+    async function loadCats() {
+      const list = await getCategories()
+      setCategories(list)
+    }
+    loadCats()
+  }, [])
 
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -43,6 +57,7 @@ export default function Register() {
       phoneNumber,
       businessName,
       businessCategory,
+      interests: accountType === 'buyer' ? selectedInterests : []
     })
 
     if (result.error) {
@@ -220,6 +235,45 @@ export default function Register() {
                 />
               </div>
             </div>
+
+            {/* Buyer Interests Extra Section */}
+            {accountType === 'buyer' && categories.length > 0 && (
+              <div className="space-y-3 bg-cream-50/50 p-4 border border-dark-100 rounded-2xl">
+                <label className="block text-xs font-bold text-dark-700 uppercase tracking-wider flex items-center gap-1.5">
+                  <Tag className="w-3.5 h-3.5 text-primary-500" />
+                  {language === 'en' ? 'What would you like to see? (Optional)' : 'ما الفئات التي تثير اهتمامك؟ (اختياري)'}
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {categories.map((cat) => {
+                    const isChecked = selectedInterests.includes(cat.id)
+                    return (
+                      <label 
+                        key={cat.id} 
+                        className={`flex items-center gap-2 p-2 border rounded-xl cursor-pointer text-xs transition-all ${
+                          isChecked 
+                            ? 'border-primary-500 bg-primary-50/50 font-bold text-primary-700' 
+                            : 'border-dark-200 hover:bg-cream-100/50 text-dark-600 bg-white'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedInterests(prev => [...prev, cat.id])
+                            } else {
+                              setSelectedInterests(prev => prev.filter(id => id !== cat.id))
+                            }
+                          }}
+                          className="rounded border-dark-300 text-primary-500 focus:ring-primary-500 h-3.5 w-3.5 shrink-0"
+                        />
+                        <span>{language === 'ar' ? cat.name_ar : cat.name_en}</span>
+                      </label>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Merchant Extra Fields */}
             {accountType === 'merchant' && (

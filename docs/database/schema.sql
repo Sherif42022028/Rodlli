@@ -183,3 +183,15 @@ CREATE TABLE IF NOT EXISTS contact_requests (
     conversation_id UUID REFERENCES conversations(id) ON DELETE CASCADE,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- ============================================
+-- 15. BUYER_INTERESTS
+-- ============================================
+CREATE TABLE IF NOT EXISTS buyer_interests (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    buyer_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+    category_id UUID REFERENCES categories(id) ON DELETE CASCADE,
+    score INTEGER DEFAULT 0,
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(buyer_id, category_id)
+);

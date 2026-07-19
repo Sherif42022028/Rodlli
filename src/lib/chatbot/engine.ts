@@ -97,6 +97,31 @@ export class ChatbotEngine {
         sql`INSERT INTO tool_call_logs (merchant_id, conversation_id, tool_name, tool_input, matched_product_id)
             VALUES (${this.merchantId}, ${convUUID}, ${toolName}, ${inputJson}::jsonb, ${productUUID})`
       )
+
+      // Interest Scoring: If asking about products or searching products
+      if (convUUID && (toolName === 'searchProducts' || toolName === 'getProductDetails')) {
+        const result = await db.execute(
+          sql`SELECT c.buyer_id, m.category_id 
+              FROM conversations c
+              JOIN merchants m ON c.merchant_id = m.id
+              WHERE c.id = ${convUUID} LIMIT 1`
+        )
+        const row = result.rows[0] as any
+        const buyerId = row?.buyer_id
+        const categoryId = row?.category_id
+
+        if (buyerId && categoryId) {
+          // Increment buyer category interest by 1 (ASK_ABOUT_PRODUCT weight) up to max score 20
+          await db.execute(
+            sql`INSERT INTO buyer_interests (buyer_id, category_id, score)
+                VALUES (${buyerId}, ${categoryId}, 1)
+                ON CONFLICT (buyer_id, category_id)
+                DO UPDATE SET 
+                  score = LEAST(20, buyer_interests.score + 1),
+                  updated_at = NOW()`
+          )
+        }
+      }
     } catch (e) {
       console.error('logToolCall error:', e)
     }

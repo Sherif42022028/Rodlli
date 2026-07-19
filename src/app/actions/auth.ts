@@ -4,8 +4,8 @@ import { db } from '@/lib/db'
 import { sql } from 'drizzle-orm'
 import bcrypt from 'bcryptjs'
 
-export async function registerUser(data: Record<string, string>) {
-  const { accountType, fullName, email, password, phoneNumber, businessName, businessCategory } = data
+export async function registerUser(data: Record<string, any>) {
+  const { accountType, fullName, email, password, phoneNumber, businessName, businessCategory, interests } = data
 
   if (!email || !password || !fullName) {
     return { error: 'Missing required fields' }
@@ -42,6 +42,17 @@ export async function registerUser(data: Record<string, string>) {
         sql`INSERT INTO merchants (profile_id, business_name, business_category, slug, chatbot_link)
             VALUES (${profileId}, ${businessName}, ${businessCategory}, ${slug}, ${chatbotLink})`
       )
+    }
+
+    if (accountType === 'buyer' && interests && Array.isArray(interests)) {
+      for (const catId of interests) {
+        await db.execute(
+          sql`INSERT INTO buyer_interests (buyer_id, category_id, score)
+              VALUES (${profileId}, ${catId}, 3)
+              ON CONFLICT (buyer_id, category_id)
+              DO UPDATE SET score = 3, updated_at = NOW()`
+        )
+      }
     }
 
     return { success: true }
