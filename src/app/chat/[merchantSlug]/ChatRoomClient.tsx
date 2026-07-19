@@ -275,9 +275,28 @@ export default function ChatRoomClient({
                       onClick={() => handleSendMessage(language === 'en' ? `Tell me more about ${p.name}` : `أخبرني أكثر عن ${p.name}`)}
                       className="border border-dark-100 rounded-xl p-3 bg-cream-50/20 hover:bg-primary-50/30 hover:border-primary-200 transition-all cursor-pointer flex gap-3 text-left"
                     >
-                      {p.image_urls && p.image_urls.length > 0 && p.image_urls[0] && (
-                        <div className="w-12 h-12 rounded-lg overflow-hidden shrink-0 border border-dark-100 bg-white">
-                          <img src={p.image_urls[0]} alt={p.name} className="w-full h-full object-cover" />
+                      {p.image_urls && p.image_urls.length > 0 && p.image_urls[0] ? (
+                        <div className="w-12 h-12 rounded-lg overflow-hidden shrink-0 border border-dark-100 bg-white flex items-center justify-center relative">
+                          <img 
+                            src={p.image_urls[0]} 
+                            alt={p.name} 
+                            className="w-full h-full object-cover relative z-10" 
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none';
+                              const parent = e.currentTarget.parentElement;
+                              if (parent) {
+                                const placeholder = parent.querySelector('.img-placeholder');
+                                if (placeholder) placeholder.classList.remove('hidden');
+                              }
+                            }}
+                          />
+                          <div className="img-placeholder absolute inset-0 hidden flex items-center justify-center bg-cream-50 text-dark-500 font-bold text-xs">
+                            🛒
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="w-12 h-12 rounded-lg bg-primary-50 flex items-center justify-center text-primary-600 font-bold text-xs shrink-0 border border-dark-100">
+                          {p.name[0].toUpperCase()}
                         </div>
                       )}
                       <div className="flex-1 min-w-0">
@@ -338,14 +357,15 @@ export default function ChatRoomClient({
         {/* Central/Right Panel: Chat Room */}
         <section className="flex-1 flex flex-col bg-cream-50/50 overflow-hidden relative">
           {/* Message List */}
-          <div className="flex-1 p-6 overflow-y-auto space-y-4">
-            {messages.map((m) => (
-              <div 
-                key={m.id} 
-                className={`flex gap-3 text-sm max-w-[85%] sm:max-w-[70%] ${
-                  m.sender === 'user' ? 'ml-auto flex-row-reverse' : 'mr-auto'
-                }`}
-              >
+          <div className="flex-1 overflow-y-auto">
+            <div className="max-w-2xl mx-auto px-4 py-6 space-y-4 w-full">
+              {messages.map((m) => (
+                <div 
+                  key={m.id} 
+                  className={`flex gap-3 text-sm max-w-[85%] ${
+                    m.sender === 'user' ? 'ml-auto flex-row-reverse' : 'mr-auto'
+                  }`}
+                >
                 {/* Avatar */}
                 <div className={`w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center shrink-0 shadow-sm ${
                   m.sender === 'user' ? 'bg-dark-900 text-white' : 'bg-primary-500 text-white'
@@ -360,8 +380,8 @@ export default function ChatRoomClient({
                 </div>
 
                 {/* Bubble Container */}
-                <div className="space-y-2">
-                  <div className={`p-3.5 rounded-2xl ${
+                <div className="space-y-2 max-w-full">
+                  <div className={`p-3.5 rounded-2xl w-fit max-w-full ${
                     m.sender === 'user' 
                       ? 'bg-dark-900 text-white rounded-tr-none' 
                       : 'bg-white border border-dark-100 text-dark-950 rounded-tl-none shadow-sm'
@@ -378,8 +398,23 @@ export default function ChatRoomClient({
                             className="bg-cream-50 hover:bg-primary-50/50 border border-dark-100 hover:border-primary-200 p-3.5 rounded-xl flex items-center gap-3 cursor-pointer transition-all text-left"
                           >
                             {p.image_urls && p.image_urls.length > 0 && p.image_urls[0] ? (
-                              <div className="w-12 h-12 rounded-lg overflow-hidden shrink-0 border border-dark-100 bg-white">
-                                <img src={p.image_urls[0]} alt={p.name} className="w-full h-full object-cover" />
+                              <div className="w-12 h-12 rounded-lg overflow-hidden shrink-0 border border-dark-100 bg-white flex items-center justify-center relative">
+                                <img 
+                                  src={p.image_urls[0]} 
+                                  alt={p.name} 
+                                  className="w-full h-full object-cover relative z-10" 
+                                  onError={(e) => {
+                                    e.currentTarget.style.display = 'none';
+                                    const parent = e.currentTarget.parentElement;
+                                    if (parent) {
+                                      const placeholder = parent.querySelector('.img-placeholder');
+                                      if (placeholder) placeholder.classList.remove('hidden');
+                                    }
+                                  }}
+                                />
+                                <div className="img-placeholder absolute inset-0 hidden flex items-center justify-center bg-cream-50 text-dark-500 font-bold text-xs">
+                                  🛒
+                                </div>
                               </div>
                             ) : (
                               <span className="text-lg">🛒</span>
@@ -419,7 +454,7 @@ export default function ChatRoomClient({
                     <Bot className="w-5 h-5" />
                   )}
                 </div>
-                <div className="bg-white border border-dark-100 text-dark-600 p-3 rounded-2xl rounded-tl-none flex items-center gap-1 shadow-sm">
+                <div className="bg-white border border-dark-100 text-dark-600 p-3 rounded-2xl rounded-bl-none flex items-center gap-1 shadow-sm">
                   <span className="w-1.5 h-1.5 rounded-full bg-dark-400 animate-bounce" style={{ animationDelay: '0ms' }} />
                   <span className="w-1.5 h-1.5 rounded-full bg-dark-400 animate-bounce" style={{ animationDelay: '150ms' }} />
                   <span className="w-1.5 h-1.5 rounded-full bg-dark-400 animate-bounce" style={{ animationDelay: '300ms' }} />
@@ -429,38 +464,44 @@ export default function ChatRoomClient({
             
             <div ref={messagesEndRef} />
           </div>
+        </div>
 
           {/* Quick Replies Panel */}
           {messages.length > 0 && messages[messages.length - 1].sender === 'bot' && messages[messages.length - 1].quickReplies && (
-            <div className="px-6 py-2 flex flex-wrap gap-2 justify-center shrink-0 z-10">
-              {messages[messages.length - 1].quickReplies?.map((qr, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => handleQuickReply(qr.action, language === 'en' ? qr.text : (qr.textAr || qr.text))}
-                  className="px-3.5 py-1.5 rounded-full border border-primary-200 bg-primary-50 hover:bg-primary-100 text-primary-700 text-xs font-bold transition-colors shadow-sm"
-                >
-                  {language === 'en' ? qr.text : (qr.textAr || qr.text)}
-                </button>
-              ))}
+            <div className="px-6 py-2 shrink-0 z-10">
+              <div className="max-w-2xl mx-auto w-full flex flex-wrap gap-2 justify-center">
+                {messages[messages.length - 1].quickReplies?.map((qr, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => handleQuickReply(qr.action, language === 'en' ? qr.text : (qr.textAr || qr.text))}
+                    className="px-3.5 py-1.5 rounded-full border border-primary-200 bg-primary-50 hover:bg-primary-100 text-primary-700 text-xs font-bold transition-colors shadow-sm"
+                  >
+                    {language === 'en' ? qr.text : (qr.textAr || qr.text)}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 
           {/* Chat Input Bar */}
-          <div className="p-4 bg-white border-t border-dark-100 flex gap-2 shrink-0">
-            <input
-              type="text"
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSendMessage(inputText)}
-              placeholder={t('chat.placeholder')}
-              className="flex-1 bg-cream-50 border border-dark-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500 transition-colors"
-            />
-            <button
-              onClick={() => handleSendMessage(inputText)}
-              className="w-12 h-12 rounded-xl bg-dark-900 hover:bg-dark-800 text-white flex items-center justify-center transition-colors"
-            >
-              <Send className="w-5 h-5" />
-            </button>
+          <div className="p-4 bg-white border-t border-dark-100 shrink-0">
+            <div className="max-w-2xl mx-auto w-full flex gap-2">
+              <input
+                type="text"
+                value={inputText}
+                onChange={(e) => setInputText(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSendMessage(inputText)}
+                placeholder={language === 'en' ? 'Type your message...' : 'اكتب رسالتك هنا...'}
+                className="flex-1 px-4 py-3 border border-dark-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 bg-cream-50/20"
+              />
+              <button
+                onClick={() => handleSendMessage(inputText)}
+                disabled={!inputText.trim() || loading}
+                className="px-5 py-3 rounded-xl bg-primary-500 hover:bg-primary-600 disabled:bg-dark-100 disabled:text-dark-400 text-white font-bold text-sm transition-colors flex items-center justify-center shrink-0"
+              >
+                <Send className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         </section>
       </div>

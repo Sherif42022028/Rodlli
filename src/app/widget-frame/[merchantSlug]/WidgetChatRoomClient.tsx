@@ -206,8 +206,8 @@ export default function WidgetChatRoomClient({
             </div>
 
             {/* Bubble */}
-            <div className="space-y-1.5">
-              <div className={`p-3 rounded-xl ${
+            <div className="space-y-1.5 max-w-full">
+              <div className={`p-3 rounded-xl w-fit max-w-full ${
                 m.sender === 'user' 
                   ? 'bg-dark-900 text-white rounded-tr-none' 
                   : 'bg-white border border-dark-100 text-dark-950 rounded-tl-none shadow-sm'
@@ -224,8 +224,23 @@ export default function WidgetChatRoomClient({
                         className="bg-cream-50 hover:bg-primary-50/50 border border-dark-100 hover:border-primary-200 p-2.5 rounded-lg flex items-center gap-2 cursor-pointer transition-all text-left"
                       >
                         {p.image_urls && p.image_urls.length > 0 && p.image_urls[0] ? (
-                          <div className="w-10 h-10 rounded-md overflow-hidden shrink-0 border border-dark-100 bg-white">
-                            <img src={p.image_urls[0]} alt={p.name} className="w-full h-full object-cover" />
+                          <div className="w-10 h-10 rounded-md overflow-hidden shrink-0 border border-dark-100 bg-white flex items-center justify-center relative">
+                            <img 
+                              src={p.image_urls[0]} 
+                              alt={p.name} 
+                              className="w-full h-full object-cover relative z-10" 
+                              onError={(e) => {
+                                e.currentTarget.style.display = 'none';
+                                const parent = e.currentTarget.parentElement;
+                                if (parent) {
+                                  const placeholder = parent.querySelector('.img-placeholder');
+                                  if (placeholder) placeholder.classList.remove('hidden');
+                                }
+                              }}
+                            />
+                            <div className="img-placeholder absolute inset-0 hidden flex items-center justify-center bg-cream-50 text-dark-500 font-bold text-xs">
+                              🛒
+                            </div>
                           </div>
                         ) : (
                           <span className="text-md">🛒</span>
