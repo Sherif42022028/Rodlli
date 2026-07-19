@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { useTranslation } from '@/components/layout/I18nProvider'
 import { queryChatbot } from '@/app/actions/chatbot'
-import { getOrCreateConversation, getChatHistory, saveChatMessage } from '@/app/actions/buyer'
+import { getOrCreateConversation, getChatHistory, saveChatMessage, createContactRequest } from '@/app/actions/buyer'
 import { 
   Bot, ShoppingBag, Globe, Phone, MapPin, 
   Send, ExternalLink, Calendar, Menu, X, MessageSquare, ArrowLeft 
@@ -130,8 +130,9 @@ export default function ChatRoomClient({
         data: res.response.data
       }
       setMessages((prev) => [...prev, botMsg])
-      // Save bot reply to database
-      await saveChatMessage(conversationId, 'bot', res.response.text)
+      // Save bot reply to database with confidence flag
+      const isConfident = res.response.confident !== false
+      await saveChatMessage(conversationId, 'bot', res.response.text, isConfident)
     } else {
       const errorMsg: Message = {
         id: Math.random().toString(),
@@ -139,12 +140,15 @@ export default function ChatRoomClient({
         text: language === 'en' ? 'Sorry, I failed to process your request.' : 'عذراً، فشل معالجة طلبك.'
       }
       setMessages((prev) => [...prev, errorMsg])
-      await saveChatMessage(conversationId, 'bot', errorMsg.text)
+      await saveChatMessage(conversationId, 'bot', errorMsg.text, false)
     }
   }
 
   // Handle Quick Reply button click
-  const handleQuickReply = (action: string, text: string) => {
+  const handleQuickReply = async (action: string, text: string) => {
+    if (action === 'contact_support' && conversationId) {
+      await createContactRequest(merchant.id, conversationId)
+    }
     handleSendMessage(text)
   }
 

@@ -1,36 +1,74 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslation } from '@/components/layout/I18nProvider'
 import { upsertMerchant, addProduct, deleteProduct, addFAQ, deleteFAQ, updateWorkingHours, resolveUnansweredQuestion } from '@/app/actions/merchant'
+import { getAnalyticsTrend } from '@/app/actions/analytics'
 import { 
   Store, ShoppingBag, HelpCircle, Clock, Link2, Copy, ExternalLink, 
-  Trash2, Plus, Edit2, Check, AlertCircle, RefreshCw, MessageSquareWarning 
+  Trash2, Plus, Edit2, Check, AlertCircle, RefreshCw, MessageSquareWarning,
+  BarChart3, TrendingUp, MessageSquare, Percent
 } from 'lucide-react'
+import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts'
 
 export default function MerchantDashboardClient({
   merchant,
   initialProducts,
   initialFAQs,
   initialHours,
-  initialUnanswered
+  initialUnanswered,
+  analyticsOverview,
+  analyticsTrend,
+  analyticsTopProducts,
+  analyticsTopQuestions,
+  analyticsConversion
 }: {
   merchant: any
   initialProducts: any[]
   initialFAQs: any[]
   initialHours: any[]
   initialUnanswered: any[]
+  analyticsOverview: any
+  analyticsTrend: any[]
+  analyticsTopProducts: any[]
+  analyticsTopQuestions: any[]
+  analyticsConversion: any
 }) {
   const { language, t } = useTranslation()
   const router = useRouter()
 
-  const [activeTab, setActiveTab] = useState<'info' | 'products' | 'faq' | 'hours' | 'link' | 'unanswered'>('info')
+  const [activeTab, setActiveTab] = useState<'info' | 'products' | 'faq' | 'hours' | 'link' | 'unanswered' | 'analytics'>('info')
   const [loading, setLoading] = useState(false)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   
   const [pendingResolveId, setPendingResolveId] = useState<string | null>(null)
+
+  // Analytics states
+  const [trendRange, setTrendRange] = useState<'7d' | '30d'>('7d')
+  const [trendData, setTrendData] = useState(analyticsTrend)
+  const [loadingTrend, setLoadingTrend] = useState(false)
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  useEffect(() => {
+    async function fetchNewTrend() {
+      setLoadingTrend(true)
+      const data = await getAnalyticsTrend(merchant.id, trendRange)
+      setTrendData(data)
+      setLoadingTrend(false)
+    }
+    
+    if (trendRange === '30d') {
+      fetchNewTrend()
+    } else {
+      setTrendData(analyticsTrend)
+    }
+  }, [trendRange, merchant.id, analyticsTrend])
 
   // 1. Store Info Edit State
   const [editMode, setEditMode] = useState(false)
@@ -252,6 +290,16 @@ export default function MerchantDashboardClient({
         </button>
 
         <button
+          onClick={() => setActiveTab('analytics')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors ${
+            activeTab === 'analytics' ? 'bg-primary-500 text-white shadow-sm' : 'hover:bg-cream-100 text-dark-600'
+          }`}
+        >
+          <BarChart3 className="w-4 h-4" />
+          {language === 'en' ? 'Analytics' : 'التحليلات'}
+        </button>
+
+        <button
           onClick={() => setActiveTab('products')}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors ${
             activeTab === 'products' ? 'bg-primary-500 text-white shadow-sm' : 'hover:bg-cream-100 text-dark-600'
@@ -323,6 +371,257 @@ export default function MerchantDashboardClient({
 
       {/* Tab Contents */}
       <div className="bg-white rounded-3xl border border-dark-100 p-6 md:p-8 shadow-sm">
+        {/* Tab: Analytics */}
+        {activeTab === 'analytics' && (
+          <div className="space-y-8 animate-fade-in">
+            <div>
+              <h3 className="text-lg font-bold text-dark-950">
+                {language === 'en' ? 'Analytics & Performance' : 'التحليلات ومؤشرات الأداء'}
+              </h3>
+              <p className="text-xs text-dark-600 mt-1">
+                {language === 'en' 
+                  ? 'Track your smart assistant responses, customer conversions, and catalog trends.'
+                  : 'تتبع استجابات المساعد الذكي، ومعدلات تحويل العملاء، واهتماماتهم بالمنتجات.'}
+              </p>
+            </div>
+
+            {/* Quick Stats Grid */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Card 1: Today's Chats */}
+              <div className="bg-cream-50/50 p-4 border border-dark-100 rounded-2xl flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-primary-50 flex items-center justify-center text-primary-600 shrink-0">
+                  <MessageSquare className="w-5 h-5" />
+                </div>
+                <div>
+                  <span className="text-[10px] text-dark-500 font-bold block uppercase tracking-wider">
+                    {language === 'en' ? "Conversations Today" : "محادثات اليوم"}
+                  </span>
+                  <span className="text-lg font-extrabold text-dark-950 block mt-0.5">
+                    {analyticsOverview.conversationsToday}
+                  </span>
+                </div>
+              </div>
+
+              {/* Card 2: Today's Messages */}
+              <div className="bg-cream-50/50 p-4 border border-dark-100 rounded-2xl flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-dark-50 flex items-center justify-center text-dark-600 shrink-0">
+                  <MessageSquare className="w-5 h-5" />
+                </div>
+                <div>
+                  <span className="text-[10px] text-dark-500 font-bold block uppercase tracking-wider">
+                    {language === 'en' ? "Messages Today" : "رسائل اليوم"}
+                  </span>
+                  <span className="text-lg font-extrabold text-dark-950 block mt-0.5">
+                    {analyticsOverview.messagesToday}
+                  </span>
+                </div>
+              </div>
+
+              {/* Card 3: AI Response Rate */}
+              {/* AI Response Rate is defined as: confident: true bot responses / total bot responses */}
+              <div className="bg-cream-50/50 p-4 border border-dark-100 rounded-2xl flex items-center gap-3" title={language === 'en' ? "Percentage of AI automated responses answered with confidence" : "نسبة ردود البوت التلقائية التي تمت الإجابة عليها بثقة"}>
+                <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0">
+                  <Percent className="w-5 h-5" />
+                </div>
+                <div>
+                  <span className="text-[10px] text-dark-500 font-bold block uppercase tracking-wider">
+                    {language === 'en' ? "AI Response Rate" : "نسبة الرد الذكي"}
+                  </span>
+                  <span className="text-lg font-extrabold text-dark-950 block mt-0.5">
+                    {(analyticsOverview.responseRate * 100).toFixed(0)}%
+                  </span>
+                </div>
+              </div>
+
+              {/* Card 4: Unanswered Questions */}
+              <div className="bg-cream-50/50 p-4 border border-dark-100 rounded-2xl flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-xl ${analyticsOverview.unansweredCount > 0 ? 'bg-red-50 text-red-500' : 'bg-cream-100 text-dark-400'} flex items-center justify-center shrink-0`}>
+                  <AlertCircle className="w-5 h-5" />
+                </div>
+                <div>
+                  <span className="text-[10px] text-dark-500 font-bold block uppercase tracking-wider">
+                    {language === 'en' ? "Unanswered Count" : "أسئلة معلقة"}
+                  </span>
+                  <span className={`text-lg font-extrabold block mt-0.5 ${analyticsOverview.unansweredCount > 0 ? 'text-red-500 animate-pulse' : 'text-dark-950'}`}>
+                    {analyticsOverview.unansweredCount}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Trend Chart & Conversion Rate */}
+            <div className="grid lg:grid-cols-3 gap-6">
+              {/* Trend Chart Card */}
+              <div className="lg:col-span-2 border border-dark-100 p-5 rounded-3xl bg-white space-y-4">
+                <div className="flex justify-between items-center">
+                  <h4 className="font-bold text-dark-950 text-sm flex items-center gap-1.5">
+                    <TrendingUp className="w-4 h-4 text-primary-500" />
+                    {language === 'en' ? 'Conversation Trend' : 'مخطط النشاط اليومي'}
+                  </h4>
+
+                  {/* Toggle 7d / 30d */}
+                  <div className="flex border border-dark-100 rounded-lg p-0.5 text-xs bg-cream-50">
+                    <button
+                      onClick={() => setTrendRange('7d')}
+                      className={`px-2.5 py-1 rounded-md font-semibold transition-colors ${
+                        trendRange === '7d' ? 'bg-white text-dark-900 shadow-sm' : 'text-dark-505'
+                      }`}
+                    >
+                      {language === 'en' ? '7 Days' : '٧ أيام'}
+                    </button>
+                    <button
+                      onClick={() => setTrendRange('30d')}
+                      className={`px-2.5 py-1 rounded-md font-semibold transition-colors ${
+                        trendRange === '30d' ? 'bg-white text-dark-900 shadow-sm' : 'text-dark-500'
+                      }`}
+                    >
+                      {language === 'en' ? '30 Days' : '٣٠ يوم'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Line Chart Render */}
+                <div className="relative h-[240px]">
+                  {loadingTrend && (
+                    <div className="absolute inset-0 bg-white/70 flex items-center justify-center text-xs font-semibold text-dark-500 z-10">
+                      {language === 'en' ? 'Loading trend...' : 'جاري التحميل...'}
+                    </div>
+                  )}
+
+                  {mounted ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={trendData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+                        <defs>
+                          <linearGradient id="colorConversations" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#F26B1D" stopOpacity={0.2}/>
+                            <stop offset="95%" stopColor="#F26B1D" stopOpacity={0}/>
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F5F0EB"/>
+                        <XAxis dataKey="date" tickLine={false} axisLine={false} style={{ fontSize: '10px', fill: '#737373' }}/>
+                        <YAxis tickLine={false} axisLine={false} style={{ fontSize: '10px', fill: '#737373' }} allowDecimals={false}/>
+                        <Tooltip contentStyle={{ borderRadius: '12px', border: '1px solid #D9D9D9', background: '#FAF8F5' }}/>
+                        <Area type="monotone" dataKey="conversations" stroke="#F26B1D" strokeWidth={2.5} fillOpacity={1} fill="url(#colorConversations)" name={language === 'en' ? 'Conversations' : 'المحادثات'}/>
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="h-full flex items-center justify-center text-xs text-dark-400">Loading chart...</div>
+                  )}
+                </div>
+              </div>
+
+              {/* Conversion Rate Card */}
+              <div className="border border-dark-100 p-5 rounded-3xl bg-white flex flex-col justify-between items-center text-center space-y-4">
+                <div className="w-full text-left">
+                  <h4 className="font-bold text-dark-950 text-sm flex items-center gap-1.5">
+                    <Percent className="w-4 h-4 text-emerald-500" />
+                    {language === 'en' ? 'Support Conversions' : 'معدل التحويل للاتصال بالدعم'}
+                  </h4>
+                  <p className="text-[10px] text-dark-505 mt-1">
+                    {language === 'en' 
+                      ? 'The percentage of chatbot interactions that resulted in a support request.'
+                      : 'نسبة محادثات البوت التي تحولت إلى طلبات تواصل أو استفسارات دعم.'}
+                  </p>
+                </div>
+
+                {/* Big Visual conversion rate */}
+                <div className="relative flex items-center justify-center py-6">
+                  {/* Decorative outer glow circles */}
+                  <div className="absolute w-32 h-32 rounded-full border border-dashed border-emerald-200 animate-spin" style={{ animationDuration: '30s' }} />
+                  <div className="absolute w-28 h-28 rounded-full border border-emerald-100" />
+                  
+                  <div className="w-24 h-24 rounded-full bg-emerald-50/50 flex flex-col items-center justify-center border border-emerald-200 shadow-inner">
+                    <span className="text-xl font-extrabold text-emerald-600 leading-none">
+                      {(analyticsConversion.conversionRate * 100).toFixed(1)}%
+                    </span>
+                  </div>
+                </div>
+
+                <div className="w-full space-y-1 bg-cream-50 border border-dark-100 p-3 rounded-xl">
+                  <span className="text-[10px] font-bold text-dark-600 block uppercase">
+                    {language === 'en' ? 'Conversion Metrics' : 'مؤشرات التحويل'}
+                  </span>
+                  <span className="text-xs font-semibold text-dark-900 block mt-1">
+                    {language === 'en' 
+                      ? `${analyticsConversion.contacts} support requests out of ${analyticsConversion.totalConvs} chats`
+                      : `${analyticsConversion.contacts} طلب تواصل من إجمالي ${analyticsConversion.totalConvs} محادثة`}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Top Products & Top Questions */}
+            <div className="grid md:grid-cols-2 gap-6">
+              {/* Top Products Asked About */}
+              <div className="border border-dark-100 p-5 rounded-3xl bg-white space-y-4">
+                <h4 className="font-bold text-dark-950 text-sm flex items-center gap-1.5 border-b border-dark-50 pb-2.5">
+                  <ShoppingBag className="w-4.5 h-4.5 text-primary-500" />
+                  {language === 'en' ? 'Top Asked Products (5)' : 'أكثر المنتجات تكراراً في الأسئلة (٥)'}
+                </h4>
+
+                {analyticsTopProducts.length === 0 ? (
+                  <div className="text-center py-8 text-xs text-dark-500 italic">
+                    {language === 'en' ? 'No product query logs found yet.' : 'لا توجد بيانات مسجلة لأسئلة المنتجات بعد.'}
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {analyticsTopProducts.map((p, idx) => (
+                      <div key={idx} className="flex items-center justify-between text-xs p-1">
+                        <div className="flex items-center gap-2 overflow-hidden mr-2">
+                          <span className="w-5 h-5 rounded bg-primary-50 text-primary-600 font-bold flex items-center justify-center shrink-0">
+                            {idx + 1}
+                          </span>
+                          <span className="font-semibold text-dark-800 truncate">{p.name}</span>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <div className="w-16 bg-cream-100 h-1.5 rounded-full overflow-hidden hidden sm:block">
+                            {/* Visual indicator bar */}
+                            <div className="bg-primary-500 h-full" style={{ width: `${Math.min(100, (p.count / (analyticsTopProducts[0]?.count || 1)) * 100)}%` }} />
+                          </div>
+                          <span className="font-bold text-dark-900 bg-cream-50 px-2 py-0.5 rounded-full">{p.count} {language === 'en' ? 'queries' : 'سؤال'}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Top FAQ Questions Asked */}
+              <div className="border border-dark-100 p-5 rounded-3xl bg-white space-y-4">
+                <h4 className="font-bold text-dark-950 text-sm flex items-center gap-1.5 border-b border-dark-50 pb-2.5">
+                  <HelpCircle className="w-4.5 h-4.5 text-primary-500" />
+                  {language === 'en' ? 'Top Asked Topics & FAQs (5)' : 'أكثر الأسئلة والمواضيع طرحاً (٥)'}
+                </h4>
+
+                {analyticsTopQuestions.length === 0 ? (
+                  <div className="text-center py-8 text-xs text-dark-500 italic">
+                    {language === 'en' ? 'No FAQ match logs found yet.' : 'لا توجد بيانات مسجلة لاستفسارات الأسئلة الشائعة بعد.'}
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {analyticsTopQuestions.map((q, idx) => (
+                      <div key={idx} className="flex items-center justify-between text-xs p-1">
+                        <div className="flex items-center gap-2 overflow-hidden mr-2">
+                          <span className="w-5 h-5 rounded bg-dark-50 text-dark-600 font-bold flex items-center justify-center shrink-0">
+                            {idx + 1}
+                          </span>
+                          <span className="font-semibold text-dark-800 truncate capitalize">&quot;{q.question}&quot;</span>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <div className="w-16 bg-cream-100 h-1.5 rounded-full overflow-hidden hidden sm:block">
+                            <div className="bg-dark-600 h-full" style={{ width: `${Math.min(100, (q.count / (analyticsTopQuestions[0]?.count || 1)) * 100)}%` }} />
+                          </div>
+                          <span className="font-bold text-dark-900 bg-cream-50 px-2 py-0.5 rounded-full">{q.count} {language === 'en' ? 'times' : 'مرة'}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Tab 1: Store Info */}
         {activeTab === 'info' && (
           <div className="space-y-6">

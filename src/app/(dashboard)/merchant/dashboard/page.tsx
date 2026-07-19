@@ -2,6 +2,7 @@ import React from 'react'
 import { redirect } from 'next/navigation'
 import { auth } from '@/lib/auth'
 import { getMerchantByProfileId, getProducts, getFAQs, getWorkingHours, getUnansweredQuestions } from '@/app/actions/merchant'
+import { getAnalyticsOverview, getAnalyticsTrend, getTopProducts, getTopQuestions, getConversionRate } from '@/app/actions/analytics'
 import MerchantDashboardClient from './MerchantDashboardClient'
 
 export default async function MerchantDashboardPage() {
@@ -24,6 +25,13 @@ export default async function MerchantDashboardPage() {
   const faqs = await getFAQs(merchant.id)
   const workingHours = await getWorkingHours(merchant.id)
   const unansweredQuestions = await getUnansweredQuestions(merchant.id)
+  
+  // Fetch Analytics data
+  const overview = await getAnalyticsOverview(merchant.id)
+  const initialTrend = await getAnalyticsTrend(merchant.id, '7d')
+  const topProducts = await getTopProducts(merchant.id, 5)
+  const topQuestions = await getTopQuestions(merchant.id, 5)
+  const conversionStats = await getConversionRate(merchant.id)
 
   return (
     <div className="space-y-8">
@@ -42,6 +50,11 @@ export default async function MerchantDashboardPage() {
         initialFAQs={faqs} 
         initialHours={workingHours} 
         initialUnanswered={unansweredQuestions}
+        analyticsOverview={overview}
+        analyticsTrend={initialTrend}
+        analyticsTopProducts={topProducts}
+        analyticsTopQuestions={topQuestions}
+        analyticsConversion={conversionStats}
       />
     </div>
   )

@@ -111,6 +111,7 @@ CREATE TABLE IF NOT EXISTS messages (
     content TEXT NOT NULL,
     content_ar TEXT, -- translated version
     quick_replies JSONB, -- [{text: "See Menu", action: "show_menu"}]
+    is_confident BOOLEAN DEFAULT true,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -157,5 +158,28 @@ CREATE TABLE IF NOT EXISTS unanswered_questions (
     question_text TEXT NOT NULL,
     conversation_id UUID REFERENCES conversations(id) ON DELETE SET NULL,
     is_resolved BOOLEAN DEFAULT false,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ============================================
+-- 13. TOOL_CALL_LOGS
+-- ============================================
+CREATE TABLE IF NOT EXISTS tool_call_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    merchant_id UUID REFERENCES merchants(id) ON DELETE CASCADE,
+    conversation_id UUID REFERENCES conversations(id) ON DELETE CASCADE,
+    tool_name TEXT NOT NULL,
+    tool_input JSONB,
+    matched_product_id UUID REFERENCES products(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ============================================
+-- 14. CONTACT_REQUESTS
+-- ============================================
+CREATE TABLE IF NOT EXISTS contact_requests (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    merchant_id UUID REFERENCES merchants(id) ON DELETE CASCADE,
+    conversation_id UUID REFERENCES conversations(id) ON DELETE CASCADE,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );

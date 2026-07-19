@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useTranslation } from '@/components/layout/I18nProvider'
 import { queryChatbot } from '@/app/actions/chatbot'
-import { getOrCreateConversation, getChatHistory, saveChatMessage } from '@/app/actions/buyer'
+import { getOrCreateConversation, getChatHistory, saveChatMessage, createContactRequest } from '@/app/actions/buyer'
 import { Bot, Send, Globe, X, ExternalLink } from 'lucide-react'
 
 interface Message {
@@ -116,7 +116,8 @@ export default function WidgetChatRoomClient({
         data: res.response.data
       }
       setMessages((prev) => [...prev, botMsg])
-      await saveChatMessage(conversationId, 'bot', res.response.text)
+      const isConfident = res.response.confident !== false
+      await saveChatMessage(conversationId, 'bot', res.response.text, isConfident)
     } else {
       const errorMsg: Message = {
         id: Math.random().toString(),
@@ -124,8 +125,15 @@ export default function WidgetChatRoomClient({
         text: language === 'en' ? 'Sorry, I failed to process your request.' : 'عذراً، فشل معالجة طلبك.'
       }
       setMessages((prev) => [...prev, errorMsg])
-      await saveChatMessage(conversationId, 'bot', errorMsg.text)
+      await saveChatMessage(conversationId, 'bot', errorMsg.text, false)
     }
+  }
+
+  const handleQuickReply = async (action: string, text: string) => {
+    if (action === 'contact_support' && conversationId) {
+      await createContactRequest(merchant.id, conversationId)
+    }
+    handleSendMessage(text)
   }
 
   const handleCloseWidget = () => {
@@ -250,7 +258,7 @@ export default function WidgetChatRoomClient({
                   {m.quickReplies.map((qr, idx) => (
                     <button
                       key={idx}
-                      onClick={() => handleSendMessage(language === 'en' ? qr.text : (qr.textAr || qr.text))}
+                      onClick={() => handleQuickReply(qr.action, language === 'en' ? qr.text : (qr.textAr || qr.text))}
                       className="px-2.5 py-1 rounded-full border border-primary-200 hover:border-primary-300 hover:bg-primary-50 text-[10px] font-semibold text-primary-600 transition-all text-left"
                     >
                       {language === 'en' ? qr.text : (qr.textAr || qr.text)}

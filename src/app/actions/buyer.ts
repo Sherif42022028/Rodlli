@@ -147,12 +147,13 @@ export async function getChatHistory(conversationId: string) {
 export async function saveChatMessage(
   conversationId: string, 
   sender: 'bot' | 'buyer' | 'merchant', 
-  content: string
+  content: string,
+  isConfident: boolean = true
 ) {
   try {
     await db.execute(
-      sql`INSERT INTO messages (conversation_id, sender_type, content)
-          VALUES (${conversationId}, ${sender}, ${content})`
+      sql`INSERT INTO messages (conversation_id, sender_type, content, is_confident)
+          VALUES (${conversationId}, ${sender}, ${content}, ${isConfident})`
     )
     return { success: true }
   } catch (error: any) {
@@ -177,5 +178,19 @@ export async function getBuyerConversations(buyerId: string) {
   } catch (error) {
     console.error('getBuyerConversations error:', error)
     return []
+  }
+}
+
+// 8. Create Contact Request
+export async function createContactRequest(merchantId: string, conversationId: string) {
+  try {
+    await db.execute(
+      sql`INSERT INTO contact_requests (merchant_id, conversation_id)
+          VALUES (${merchantId}, ${conversationId})`
+    )
+    return { success: true }
+  } catch (error: any) {
+    console.error('createContactRequest error:', error)
+    return { error: error.message || 'Failed to create contact request' }
   }
 }

@@ -15,6 +15,7 @@ interface ChatbotResponse {
   type: 'text' | 'products' | 'hours' | 'faq' | 'link'
   quickReplies?: QuickReply[]
   data?: any
+  confident?: boolean
 }
 
 export class ChatbotEngine {
@@ -81,11 +82,49 @@ export class ChatbotEngine {
     }
   }
 
+  private async logToolCall(
+    toolName: string,
+    toolInput: any,
+    conversationId?: string | null,
+    matchedProductId?: string | null
+  ) {
+    try {
+      const convUUID = conversationId || null
+      const inputJson = JSON.stringify(toolInput)
+      const productUUID = matchedProductId || null
+
+      await db.execute(
+        sql`INSERT INTO tool_call_logs (merchant_id, conversation_id, tool_name, tool_input, matched_product_id)
+            VALUES (${this.merchantId}, ${convUUID}, ${toolName}, ${inputJson}::jsonb, ${productUUID})`
+      )
+    } catch (e) {
+      console.error('logToolCall error:', e)
+    }
+  }
+
+  private async logContactRequest(conversationId?: string | null) {
+    if (!conversationId) return
+    try {
+      await db.execute(
+        sql`INSERT INTO contact_requests (merchant_id, conversation_id)
+            VALUES (${this.merchantId}, ${conversationId})`
+      )
+    } catch (e) {
+      console.error('logContactRequest error:', e)
+    }
+  }
+
   async processMessage(
     userMessage: string, 
     language: 'en' | 'ar' = 'en',
     conversationId?: string | null
   ): Promise<ChatbotResponse> {
+    const lowerMsg = userMessage.toLowerCase().trim()
+    const isContactMsg = this.matchesKeywords(lowerMsg, ['contact', 'support', 'phone', 'whatsapp', 'call', 'تواصل', 'دعم', 'اتصال', 'تلفون', 'هاتف', 'رقم'])
+    if (isContactMsg) {
+      await this.logContactRequest(conversationId)
+    }
+
     const zhipuApiKey = process.env.ZHIPU_API_KEY
 
     if (zhipuApiKey) {
@@ -223,12 +262,17 @@ export class ChatbotEngine {
 
       if (call.name === 'searchProducts') {
         resultData = await searchProducts(args.query as string, args.merchantId as string || this.merchantId)
+        const firstProdId = resultData && resultData.length > 0 ? resultData[0].id : null
+        await this.logToolCall('searchProducts', { query: args.query }, conversationId, firstProdId)
       } else if (call.name === 'getProductDetails') {
         resultData = await getProductDetails(args.productId as string)
+        await this.logToolCall('getProductDetails', { productId: args.productId }, conversationId, args.productId as string)
       } else if (call.name === 'getFAQAnswer') {
         resultData = await getFAQAnswer(args.topic as string, args.merchantId as string || this.merchantId)
+        await this.logToolCall('getFAQAnswer', { topic: args.topic }, conversationId, null)
       } else if (call.name === 'checkWorkingHours') {
         resultData = await checkWorkingHours(args.merchantId as string || this.merchantId)
+        await this.logToolCall('checkWorkingHours', {}, conversationId, null)
       }
 
       response = await chat.sendMessage([
@@ -252,13 +296,15 @@ export class ChatbotEngine {
         text: language === 'en'
           ? "I have logged your question for the store support team. They will reply shortly!"
           : "لقد قمت بنقل استفسارك لفريق دعم المتجر، وسيتم الرد عليك قريباً!",
-        type: 'text'
+        type: 'text',
+        confident: false
       }
     }
 
     return {
       text: parsed.reply,
       type: 'text',
+      confident: true,
       quickReplies: [
         { text: "Products Catalog", textAr: "كتالوج المنتجات", action: 'show_menu' },
         { text: "Business Hours", textAr: "مواعيد العمل", action: 'show_hours' }
@@ -403,12 +449,17 @@ export class ChatbotEngine {
 
         if (callName === 'searchProducts') {
           resultData = await searchProducts(callArgs.query, callArgs.merchantId || this.merchantId)
+          const firstProdId = resultData && resultData.length > 0 ? resultData[0].id : null
+          await this.logToolCall('searchProducts', { query: callArgs.query }, conversationId, firstProdId)
         } else if (callName === 'getProductDetails') {
           resultData = await getProductDetails(callArgs.productId)
+          await this.logToolCall('getProductDetails', { productId: callArgs.productId }, conversationId, callArgs.productId)
         } else if (callName === 'getFAQAnswer') {
           resultData = await getFAQAnswer(callArgs.topic, callArgs.merchantId || this.merchantId)
+          await this.logToolCall('getFAQAnswer', { topic: callArgs.topic }, conversationId, null)
         } else if (callName === 'checkWorkingHours') {
           resultData = await checkWorkingHours(callArgs.merchantId || this.merchantId)
+          await this.logToolCall('checkWorkingHours', {}, conversationId, null)
         }
 
         messages.push({
@@ -437,13 +488,15 @@ export class ChatbotEngine {
         text: language === 'en'
           ? "I have logged your question for the store support team. They will reply shortly!"
           : "لقد قمت بنقل استفسارك لفريق دعم المتجر، وسيتم الرد عليك قريباً!",
-        type: 'text'
+        type: 'text',
+        confident: false
       }
     }
 
     return {
       text: parsed.reply,
       type: 'text',
+      confident: true,
       quickReplies: [
         { text: "Products Catalog", textAr: "كتالوج المنتجات", action: 'show_menu' },
         { text: "Business Hours", textAr: "مواعيد العمل", action: 'show_hours' }
@@ -469,12 +522,14 @@ export class ChatbotEngine {
       for (const p of products) {
         const prodName = p.name.toLowerCase()
         if (lowerMsg.includes(prodName)) {
+          await this.logToolCall('getProductDetails', { productId: p.id }, conversationId, p.id)
           return {
             text: language === 'en'
               ? `Here is the product info:\n\n*Product Name:* ${p.name}\n*Price:* $${p.price}\n*Description:* ${p.description || 'No description available.'}`
               : `إليك معلومات المنتج:\n\n*اسم المنتج:* ${p.name}\n*السعر:* ${p.price}$\n*الوصف:* ${p.description || 'لا يوجد وصف متاح.'}`,
             type: 'products',
             data: [p],
+            confident: true,
             quickReplies: [
               { text: "View All Products", textAr: "عرض كل المنتجات", action: 'show_menu' }
             ]
@@ -492,6 +547,7 @@ export class ChatbotEngine {
           ? "Hi there! 👋 Welcome to our store. How can I help you today?"
           : "أهلاً بك 👋 في متجرنا! كيف يمكنني مساعدتك اليوم؟",
         type: 'text',
+        confident: true,
         quickReplies: [
           { text: "See Products Menu", textAr: "عرض قائمة المنتجات", action: 'show_menu' },
           { text: 'Business Hours', textAr: 'ساعات العمل', action: 'show_hours' }
@@ -501,16 +557,20 @@ export class ChatbotEngine {
 
     // 2. Products Menu
     if (this.matchesKeywords(lowerMsg, ['menu', 'products', 'catalog', 'today', 'منتجات', 'قائمة', 'معرض', 'عرض'])) {
-      return await this.getProducts(language)
+      await this.logToolCall('searchProducts', { query: 'menu' }, conversationId, null)
+      const response = await this.getProducts(language)
+      return { ...response, confident: true }
     }
 
     // 3. Working Hours
     if (this.matchesKeywords(lowerMsg, ['hours', 'open', 'time', 'ساعات', 'متى', 'مواعيد', 'وقت', 'فتح'])) {
-      return await this.getWorkingHours(language)
+      await this.logToolCall('checkWorkingHours', {}, conversationId, null)
+      const response = await this.getWorkingHours(language)
+      return { ...response, confident: true }
     }
 
     // 4. Mapped FAQs lookup
-    const faqResponse = await this.matchFAQ(lowerMsg, language)
+    const faqResponse = await this.matchFAQ(lowerMsg, language, conversationId)
     if (faqResponse) {
       return faqResponse
     }
@@ -524,6 +584,7 @@ export class ChatbotEngine {
         ? "I'm sorry, I couldn't find an answer to that. I have logged your question for the merchant!"
         : "عذراً، لم أجد إجابة لذلك. لقد قمت بنقل استفسارك لإدارة المتجر لبرمجة إجابته قريباً!",
       type: 'text',
+      confident: false,
       quickReplies: [
         { text: "Show Catalog", textAr: "عرض الكتالوج", action: 'show_menu' },
         { text: "Working Hours", textAr: "مواعيد العمل", action: 'show_hours' }
@@ -609,7 +670,7 @@ export class ChatbotEngine {
     }
   }
 
-  private async matchFAQ(lowerMsg: string, lang: 'en' | 'ar'): Promise<ChatbotResponse | null> {
+  private async matchFAQ(lowerMsg: string, lang: 'en' | 'ar', conversationId?: string | null): Promise<ChatbotResponse | null> {
     try {
       const result = await db.execute(
         sql`SELECT question, answer FROM faqs WHERE merchant_id = ${this.merchantId}`
@@ -619,9 +680,11 @@ export class ChatbotEngine {
       for (const faq of faqs) {
         const question = faq.question.toLowerCase()
         if (lowerMsg.includes(question) || question.includes(lowerMsg)) {
+          await this.logToolCall('getFAQAnswer', { topic: faq.question }, conversationId, null)
           return {
             text: faq.answer,
             type: 'faq',
+            confident: true,
             quickReplies: [
               { text: "Ask Another Question", textAr: "سؤال آخر", action: 'ask_faq' }
             ]
