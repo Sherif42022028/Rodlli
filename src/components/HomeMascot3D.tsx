@@ -17,8 +17,25 @@ function AnimatedMascot() {
   const groupRef = useRef<THREE.Group>(null);
   const { scene } = useGLTF("/models/chat.glb");
 
-  // نستنسخ الـ scene عشان لو الكومبوننت اتعمله remount، مايحصلش تعارض
-  const clonedScene = useState(() => scene.clone())[0];
+  // نستنسخ الـ scene ونقوم بضبط الأبعاد والمركز تلقائياً لتفادي خروج الموديل عن نطاق الكاميرا
+  const clonedScene = useState(() => {
+    const s = scene.clone();
+    
+    // حساب الحدود المحيطة بالموديل لتركيزه في المنتصف [0, 0, 0]
+    const box = new THREE.Box3().setFromObject(s);
+    const center = new THREE.Vector3();
+    box.getCenter(center);
+    s.position.sub(center);
+    
+    // قياس حجم الموديل لمواءمة مقياس الرسم (Scale) تلقائياً ليناسب إطار الكاميرا
+    const size = new THREE.Vector3();
+    box.getSize(size);
+    const maxDim = Math.max(size.x, size.y, size.z);
+    const targetScale = 1.8 / (maxDim || 1);
+    s.scale.setScalar(targetScale);
+    
+    return s;
+  })[0];
 
   useFrame((state) => {
     if (!groupRef.current) return;
