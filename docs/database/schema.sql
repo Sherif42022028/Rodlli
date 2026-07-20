@@ -36,10 +36,32 @@ CREATE TABLE IF NOT EXISTS merchants (
     last_synced_at TIMESTAMPTZ,
     last_sync_status TEXT, -- 'success' | 'error' | 'pending'
     last_sync_error TEXT,
+    orders_sheet_id TEXT,
+    orders_last_synced_at TIMESTAMPTZ,
+    orders_sync_enabled BOOLEAN DEFAULT false,
+    orders_last_sync_status TEXT,
+    orders_last_sync_error TEXT,
     is_online BOOLEAN DEFAULT true,
     is_active BOOLEAN DEFAULT true,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ============================================
+-- 16. ORDERS
+-- ============================================
+CREATE TABLE IF NOT EXISTS orders (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    merchant_id UUID REFERENCES merchants(id) ON DELETE CASCADE,
+    order_id_external TEXT NOT NULL,
+    customer_name TEXT,
+    product_name TEXT,
+    status TEXT CHECK (status IN ('PENDING', 'SHIPPED', 'DELIVERED', 'CANCELLED')) DEFAULT 'PENDING',
+    expected_date TEXT,
+    notes TEXT,
+    last_synced_at TIMESTAMPTZ DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT unique_merchant_order UNIQUE (merchant_id, order_id_external)
 );
 
 -- ============================================

@@ -3,12 +3,12 @@
 import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslation } from '@/components/layout/I18nProvider'
-import { upsertMerchant, addProduct, deleteProduct, deleteProductsBulk, deleteAllMerchantProducts, addFAQ, deleteFAQ, updateWorkingHours, resolveUnansweredQuestion, saveMerchantSheetLink, triggerManualSheetSync, disconnectMerchantSheet } from '@/app/actions/merchant'
+import { upsertMerchant, addProduct, deleteProduct, deleteProductsBulk, deleteAllMerchantProducts, addFAQ, deleteFAQ, updateWorkingHours, resolveUnansweredQuestion, saveMerchantSheetLink, triggerManualSheetSync, disconnectMerchantSheet, saveMerchantOrdersSheetLink, triggerManualOrdersSync, disconnectMerchantOrdersSheet, getMerchantOrders } from '@/app/actions/merchant'
 import { getAnalyticsTrend } from '@/app/actions/analytics'
 import { 
   Store, ShoppingBag, HelpCircle, Clock, Link2, Copy, ExternalLink, 
   Trash2, Plus, Edit2, Check, AlertCircle, RefreshCw, MessageSquareWarning,
-  BarChart3, TrendingUp, MessageSquare, Percent, FileSpreadsheet
+  BarChart3, TrendingUp, MessageSquare, Percent, FileSpreadsheet, PackageCheck, Truck
 } from 'lucide-react'
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts'
 
@@ -38,7 +38,7 @@ export default function MerchantDashboardClient({
   const { language, t } = useTranslation()
   const router = useRouter()
 
-  const [activeTab, setActiveTab] = useState<'info' | 'products' | 'faq' | 'hours' | 'link' | 'unanswered' | 'analytics' | 'sheets'>('info')
+  const [activeTab, setActiveTab] = useState<'info' | 'products' | 'faq' | 'hours' | 'link' | 'unanswered' | 'analytics' | 'sheets' | 'orders_sheet'>('info')
   const [loading, setLoading] = useState(false)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
@@ -419,6 +419,77 @@ export default function MerchantDashboardClient({
     }
   }
 
+  // 5. Orders Sheet State & Handlers
+  const [ordersSheetInputUrl, setOrdersSheetInputUrl] = useState(merchant.orders_sheet_id ? `https://docs.google.com/spreadsheets/d/${merchant.orders_sheet_id}` : '')
+  const [savingOrdersSheet, setSavingOrdersSheet] = useState(false)
+  const [syncingOrders, setSyncingOrders] = useState(false)
+  const [ordersList, setOrdersList] = useState<any[]>([])
+
+  useEffect(() => {
+    if (activeTab === 'orders_sheet') {
+      getMerchantOrders(merchant.id).then((data) => setOrdersList(data))
+    }
+  }, [activeTab, merchant.id])
+
+  const handleSaveOrdersSheetLink = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!ordersSheetInputUrl.trim()) return
+    setSavingOrdersSheet(true)
+    const res = await saveMerchantOrdersSheetLink(merchant.id, ordersSheetInputUrl)
+    setSavingOrdersSheet(false)
+    if (res.error) {
+      showMessage(null, res.error)
+    } else {
+      if (res.warning) {
+        showMessage(
+          language === 'en' ? `Orders Sheet linked with warning: ${res.warning}` : `تم حفظ رابط شيت الأوردرات مع تحذير: ${res.warning}`,
+          null
+        )
+      } else {
+        showMessage(
+          language === 'en' ? `Orders Sheet linked successfully! Synced ${res.count} orders.` : `تم ربط شيت الأوردرات ومزامنة ${res.count} أوردر بنجاح!`,
+          null
+        )
+      }
+      getMerchantOrders(merchant.id).then((data) => setOrdersList(data))
+      router.refresh()
+    }
+  }
+
+  const handleManualOrdersSync = async () => {
+    setSyncingOrders(true)
+    const res = await triggerManualOrdersSync(merchant.id)
+    setSyncingOrders(false)
+    if (res.error) {
+      showMessage(null, res.error)
+    } else {
+      showMessage(
+        language === 'en' ? `Orders synced successfully! Total ${res.count} orders synced.` : `تمت مزامنة الأوردرات بنجاح! إجمالي ${res.count} أوردر مسجل.`,
+        null
+      )
+      getMerchantOrders(merchant.id).then((data) => setOrdersList(data))
+      router.refresh()
+    }
+  }
+
+  const handleDisconnectOrdersSheet = async () => {
+    if (!confirm(language === 'en' ? 'Are you sure you want to disconnect Orders Google Sheet?' : 'هل أنت متأكد من إلغاء ربط شيت الأوردرات؟')) return
+    setLoading(true)
+    const res = await disconnectMerchantOrdersSheet(merchant.id)
+    setLoading(false)
+    if (res.error) {
+      showMessage(null, res.error)
+    } else {
+      setOrdersSheetInputUrl('')
+      setOrdersList([])
+      showMessage(
+        language === 'en' ? 'Orders Sheet disconnected.' : 'تم إلغاء ربط شيت الأوردرات.',
+        null
+      )
+      router.refresh()
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Tab controls */}
@@ -462,6 +533,19 @@ export default function MerchantDashboardClient({
           <FileSpreadsheet className="w-4 h-4" />
           {language === 'en' ? 'Google Sheets Sync' : 'مزامنة Google Sheets'}
           {merchant.sheet_sync_enabled && (
+            <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0 animate-pulse" />
+          )}
+        </button>
+
+        <button
+          onClick={() => setActiveTab('orders_sheet')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors ${
+            activeTab === 'orders_sheet' ? 'bg-primary-500 text-white shadow-sm' : 'hover:bg-cream-100 text-dark-600'
+          }`}
+        >
+          <PackageCheck className="w-4 h-4" />
+          {language === 'en' ? 'Orders Sync' : 'متابعة الأوردرات'}
+          {merchant.orders_sync_enabled && (
             <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0 animate-pulse" />
           )}
         </button>
@@ -1389,6 +1473,292 @@ export default function MerchantDashboardClient({
                     </tr>
                   </tbody>
                 </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Tab: Orders Google Sheets Tracking */}
+        {activeTab === 'orders_sheet' && (
+          <div className="space-y-8 animate-fade-in">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-dark-100 pb-4">
+              <div>
+                <h3 className="text-lg font-bold text-dark-950 flex items-center gap-2">
+                  <PackageCheck className="w-5 h-5 text-primary-500" />
+                  {language === 'en' ? 'Orders Tracking (Google Sheets)' : 'متابعة حالة الأوردرات عِبر Google Sheets'}
+                </h3>
+                <p className="text-xs text-dark-600 mt-1">
+                  {language === 'en'
+                    ? 'Connect your Orders Google Sheet to enable smart order status responses in your chatbot.'
+                    : 'اربط شيت الأوردرات لتمكين الشات بوت من الإجابة على استفسارات حالة الطلب للعملاء فوراً.'}
+                </p>
+              </div>
+
+              {merchant.orders_sync_enabled && (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleManualOrdersSync}
+                    disabled={syncingOrders}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold transition-all shadow-sm disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${syncingOrders ? 'animate-spin' : ''}`} />
+                    {language === 'en' ? 'Sync Orders Now' : 'مزامنة الأوردرات الآن'}
+                  </button>
+
+                  <button
+                    onClick={handleDisconnectOrdersSheet}
+                    className="px-3 py-2 border border-red-200 text-red-600 hover:bg-red-50 rounded-xl text-xs font-bold transition-all"
+                  >
+                    {language === 'en' ? 'Disconnect' : 'إلغاء الربط'}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Sync Overview Card */}
+            {merchant.orders_sync_enabled && (
+              <div className="grid gap-4 sm:grid-cols-3 bg-cream-50/50 p-4 border border-dark-100 rounded-3xl">
+                <div>
+                  <span className="text-[10px] text-dark-400 font-bold uppercase tracking-wider block">
+                    {language === 'en' ? 'SYNC STATUS' : 'حالة المزامنة'}
+                  </span>
+                  <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-0.5 rounded-full mt-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
+                    {language === 'en' ? 'Active' : 'نشط والمزامنة شغالة'}
+                  </span>
+                </div>
+
+                <div>
+                  <span className="text-[10px] text-dark-400 font-bold uppercase tracking-wider block">
+                    {language === 'en' ? 'LAST SYNCED' : 'آخر مزامنة ناجحة'}
+                  </span>
+                  <span className="text-xs font-semibold text-dark-900 mt-1 block">
+                    {merchant.orders_last_synced_at
+                      ? new Date(merchant.orders_last_synced_at).toLocaleString(language === 'ar' ? 'ar-EG' : 'en-US')
+                      : (language === 'en' ? 'Not synced yet' : 'لم تنفذ بعد')}
+                  </span>
+                </div>
+
+                <div>
+                  <span className="text-[10px] text-dark-400 font-bold uppercase tracking-wider block">
+                    {language === 'en' ? 'SYNC SCHEDULE' : 'تكرار المزامنة'}
+                  </span>
+                  <span className="text-xs font-semibold text-dark-900 mt-1 block">
+                    {language === 'en' ? 'Automatic (Every 15 Mins)' : 'تلقائي (كل ١٥ دقيقة)'}
+                  </span>
+                </div>
+
+                {merchant.orders_last_sync_error && (
+                  <div className="sm:col-span-3 bg-red-50 border border-red-200 text-red-700 p-3 rounded-2xl text-xs flex items-start gap-2 mt-2">
+                    <AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-bold block">{language === 'en' ? 'Sync Warning / Error:' : 'تنبيه المزامنة:'}</span>
+                      <span>{merchant.orders_last_sync_error}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Step 1: Connect Google Account if not connected yet */}
+            {!merchant.google_refresh_token ? (
+              <div className="bg-white border border-dark-100 p-6 rounded-3xl space-y-4 max-w-2xl">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold shrink-0">
+                    1
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-dark-950 text-sm">
+                      {language === 'en' ? 'Connect Google Account' : 'الخطوة الأولى: ربط حساب Google'}
+                    </h4>
+                    <p className="text-xs text-dark-600">
+                      {language === 'en'
+                        ? 'Authorize Rodlli to securely read your Google Sheets data.'
+                        : 'امنح المنصة صلاحية قراءة بيانات Google Sheets بأمان.'}
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleConnectGoogleSheets}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-dark-900 hover:bg-dark-800 text-white rounded-xl text-xs font-bold transition-all shadow-sm"
+                >
+                  <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+                  {language === 'en' ? 'Sign in with Google' : 'تسجيل الدخول وربط حساب Google'}
+                </button>
+              </div>
+            ) : (
+              /* Step 2: Link Orders Sheet URL */
+              <div className="bg-white border border-dark-100 p-6 rounded-3xl space-y-4 max-w-2xl">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-primary-50 text-primary-600 flex items-center justify-center font-bold shrink-0">
+                    {merchant.orders_sheet_id ? '✓' : '1'}
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-dark-950 text-sm">
+                      {language === 'en' ? 'Link Orders Google Sheet URL' : 'ربط رابط شيت الأوردرات (Google Sheet)'}
+                    </h4>
+                    <p className="text-xs text-dark-600">
+                      {language === 'en'
+                        ? 'Paste the full shareable URL of your Orders Google Sheet.'
+                        : 'انسخ ورسخ رابط شيت الأوردرات الخاص بك من متصفحك.'}
+                    </p>
+                  </div>
+                </div>
+
+                <form onSubmit={handleSaveOrdersSheetLink} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold text-dark-700 mb-1">
+                      {language === 'en' ? 'Orders Sheet URL' : 'رابط شيت الأوردرات'}
+                    </label>
+                    <input
+                      type="url"
+                      required
+                      value={ordersSheetInputUrl}
+                      onChange={(e) => setOrdersSheetInputUrl(e.target.value)}
+                      placeholder="https://docs.google.com/spreadsheets/d/.../edit"
+                      className="w-full px-3 py-2.5 border border-dark-200 rounded-xl text-sm font-mono text-dark-900"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="submit"
+                      disabled={savingOrdersSheet}
+                      className="px-5 py-2.5 bg-primary-500 hover:bg-primary-600 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-2 disabled:opacity-50"
+                    >
+                      {savingOrdersSheet && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                      {language === 'en' ? 'Save & Start Orders Sync' : 'حفظ وبدء مزامنة الأوردرات'}
+                    </button>
+
+                    {merchant.orders_sheet_id && (
+                      <a
+                        href={`https://docs.google.com/spreadsheets/d/${merchant.orders_sheet_id}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-xs font-bold text-primary-500 hover:underline flex items-center gap-1"
+                      >
+                        {language === 'en' ? 'Open Sheet' : 'فتح شيت الأوردرات'}
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
+                    )}
+                  </div>
+                </form>
+              </div>
+            )}
+
+            {/* Synced Orders Table Preview */}
+            {ordersList.length > 0 && (
+              <div className="border border-dark-100 p-6 rounded-3xl bg-white space-y-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-bold text-dark-950 text-sm flex items-center gap-2">
+                    <Truck className="w-4.5 h-4.5 text-primary-500" />
+                    {language === 'en' ? `Synced Orders List (${ordersList.length})` : `قائمة الأوردرات المتزامنة (${ordersList.length})`}
+                  </h4>
+                  <span className="text-[10px] text-dark-500 font-semibold">
+                    {language === 'en' ? 'Last 50 orders' : 'أحدث ٥٠ أوردر'}
+                  </span>
+                </div>
+
+                <div className="overflow-x-auto border border-dark-100 rounded-2xl">
+                  <table className="w-full text-xs text-left">
+                    <thead>
+                      <tr className="bg-cream-100 text-dark-800 font-bold border-b border-dark-100">
+                        <th className="p-3">Order ID</th>
+                        <th className="p-3">Customer</th>
+                        <th className="p-3">Product</th>
+                        <th className="p-3">Status</th>
+                        <th className="p-3">Expected Date</th>
+                        <th className="p-3">Notes</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-dark-50 text-dark-700">
+                      {ordersList.map((ord) => {
+                        let statusBadgeClass = 'bg-yellow-50 text-yellow-700 border-yellow-200'
+                        let statusLabel = 'قيد التجهيز ⏳'
+                        if (ord.status === 'SHIPPED') {
+                          statusBadgeClass = 'bg-blue-50 text-blue-700 border-blue-200'
+                          statusLabel = 'في الطريق 🚚'
+                        } else if (ord.status === 'DELIVERED') {
+                          statusBadgeClass = 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          statusLabel = 'تم التسليم ✅'
+                        } else if (ord.status === 'CANCELLED') {
+                          statusBadgeClass = 'bg-red-50 text-red-700 border-red-200'
+                          statusLabel = 'ملغي ❌'
+                        }
+                        return (
+                          <tr key={ord.id} className="hover:bg-cream-50/50">
+                            <td className="p-3 font-mono font-bold text-dark-950">{ord.order_id_external}</td>
+                            <td className="p-3 font-semibold">{ord.customer_name || '-'}</td>
+                            <td className="p-3">{ord.product_name || '-'}</td>
+                            <td className="p-3">
+                              <span className={`inline-block px-2.5 py-0.5 rounded-full border text-[10px] font-bold ${statusBadgeClass}`}>
+                                {statusLabel}
+                              </span>
+                            </td>
+                            <td className="p-3 font-semibold">{ord.expected_date || '-'}</td>
+                            <td className="p-3 text-dark-500">{ord.notes || '-'}</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Orders Template & Format Instructions */}
+            <div className="border border-dark-100 p-6 rounded-3xl bg-cream-50/50 space-y-4 max-w-2xl">
+              <h4 className="font-bold text-dark-950 text-sm flex items-center gap-2">
+                <PackageCheck className="w-4 h-4 text-primary-500" />
+                {language === 'en' ? 'Required Orders Sheet Format' : 'تنسيق ترتيب أعمدة شيت الأوردرات'}
+              </h4>
+
+              <p className="text-xs text-dark-600">
+                {language === 'en'
+                  ? 'Ensure your sheet follows the strict column order starting from row 2 (row 1 is reserved for headers):'
+                  : 'تأكد من ترتيب الأعمدة في شيت الأوردرات من اليسار إلى اليمين بدءاً من الصف الثاني (الصف الأول للعناوين):'}
+              </p>
+
+              <div className="overflow-x-auto border border-dark-100 rounded-2xl bg-white text-xs">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-cream-100 text-dark-800 font-bold border-b border-dark-100">
+                      <th className="p-2.5">Col A</th>
+                      <th className="p-2.5">Col B</th>
+                      <th className="p-2.5">Col C</th>
+                      <th className="p-2.5">Col D</th>
+                      <th className="p-2.5">Col E</th>
+                      <th className="p-2.5">Col F</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-dark-50 text-dark-700">
+                    <tr>
+                      <td className="p-2.5 font-semibold">Order ID</td>
+                      <td className="p-2.5 font-semibold">اسم العميل</td>
+                      <td className="p-2.5">المنتج</td>
+                      <td className="p-2.5 font-bold text-primary-600">الحالة *</td>
+                      <td className="p-2.5">تاريخ متوقع</td>
+                      <td className="p-2.5">ملاحظات</td>
+                    </tr>
+                    <tr className="bg-cream-50/30 text-dark-500">
+                      <td className="p-2.5 font-mono font-bold">RD-1032</td>
+                      <td className="p-2.5">أحمد علي</td>
+                      <td className="p-2.5">قميص قطن</td>
+                      <td className="p-2.5 font-bold text-blue-600">في الطريق</td>
+                      <td className="p-2.5">25 يوليو</td>
+                      <td className="p-2.5">التوصيل مساءً</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="bg-primary-50 border border-primary-200 text-primary-800 p-3 rounded-2xl text-xs space-y-1">
+                <span className="font-bold block">💡 الحالات المقبولة في العمود الرابع (Col D):</span>
+                <p>• <strong>قيد التجهيز</strong> (PENDING)</p>
+                <p>• <strong>في الطريق</strong> (SHIPPED)</p>
+                <p>• <strong>تم التسليم</strong> (DELIVERED)</p>
+                <p>• <strong>ملغي</strong> (CANCELLED)</p>
               </div>
             </div>
           </div>

@@ -75,3 +75,55 @@ export async function checkWorkingHours(merchantId: string) {
     return []
   }
 }
+
+// 5. Check order status
+export async function checkOrderStatus(orderId: string, merchantId: string) {
+  try {
+    const cleanOrderId = orderId.trim().replace(/^#/, '')
+    const searchPattern = `%${cleanOrderId}%`
+    
+    const result = await db.execute(
+      sql`SELECT order_id_external, customer_name, product_name, status, expected_date, notes, last_synced_at
+          FROM orders
+          WHERE merchant_id = ${merchantId}
+            AND (order_id_external ILIKE ${cleanOrderId} OR order_id_external ILIKE ${searchPattern})
+          LIMIT 1`
+    )
+    const rows = result.rows as unknown as any[]
+    if (rows && rows.length > 0) {
+      const ord = rows[0]
+      let statusAr = 'قيد التجهيز ⏳'
+      let statusEn = 'Pending ⏳'
+      if (ord.status === 'SHIPPED') {
+        statusAr = 'في الطريق 🚚'
+        statusEn = 'Shipped / In Transit 🚚'
+      } else if (ord.status === 'DELIVERED') {
+        statusAr = 'تم التسليم ✅'
+        statusEn = 'Delivered ✅'
+      } else if (ord.status === 'CANCELLED') {
+        statusAr = 'ملغي ❌'
+        statusEn = 'Cancelled ❌'
+      } else {
+        statusAr = 'قيد التجهيز ⏳'
+        statusEn = 'Pending ⏳'
+      }
+
+      return {
+        found: true,
+        orderId: ord.order_id_external,
+        customerName: ord.customer_name,
+        productName: ord.product_name,
+        status: ord.status,
+        statusAr,
+        statusEn,
+        expectedDate: ord.expected_date,
+        notes: ord.notes
+      }
+    }
+
+    return { found: false, orderId: cleanOrderId }
+  } catch (error) {
+    console.error('checkOrderStatus tool error:', error)
+    return { found: false, orderId }
+  }
+}

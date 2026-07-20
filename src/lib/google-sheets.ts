@@ -356,3 +356,193 @@ export async function syncMerchantSheet(merchantId: string) {
     return { error: errorMsg }
   }
 }
+
+/**
+ * Performs full orders sync for a merchant from their linked Google Sheet.
+ */
+export async function syncMerchantOrders(merchantId: string) {
+  try {
+    // 1. Fetch merchant details
+    const merchantRes = await db.execute(
+      sql`SELECT id, google_sheet_id, orders_sheet_id, google_refresh_token FROM merchants WHERE id = ${merchantId}`
+    )
+    const merchantRows = merchantRes.rows as unknown as any[]
+    if (!merchantRows || merchantRows.length === 0) {
+      return { error: 'Merchant not found' }
+    }
+
+    const merchant = merchantRows[0]
+    const sheetId = merchant.orders_sheet_id || merchant.google_sheet_id
+    if (!sheetId || !merchant.google_refresh_token) {
+      return { error: 'Orders Google Sheet is not connected' }
+    }
+
+    // 2. Get Access Token
+    let accessToken: string
+    try {
+      accessToken = await getAccessTokenFromRefreshToken(merchant.google_refresh_token)
+    } catch (authError: any) {
+      console.error(`Orders Sync Auth Error for merchant ${merchantId}:`, authError)
+      const errorMsg = 'انقطع الاتصال بـ Google Sheets، يرجى إعادة الربط وتجديد التصريح'
+      await db.execute(
+        sql`UPDATE merchants 
+            SET orders_last_sync_status = 'error', 
+                orders_last_sync_error = ${errorMsg},
+                updated_at = NOW() 
+            WHERE id = ${merchantId}`
+      )
+      return { error: errorMsg }
+    }
+
+    // 3. Fetch Rows from Sheet (Range A1:F1000)
+    let rows: string[][] = []
+    try {
+      rows = await fetchSheetRows(sheetId, accessToken, 'A1:F1000')
+    } catch (sheetError: any) {
+      console.error(`Orders Sheet Fetch Error for merchant ${merchantId}:`, sheetError)
+      const errorMsg = `فشل قراءة شيت الأوردرات: ${sheetError.message || 'تأكد من وجود الشيت ومشاركته'}`
+      await db.execute(
+        sql`UPDATE merchants 
+            SET orders_last_sync_status = 'error', 
+                orders_last_sync_error = ${errorMsg},
+                updated_at = NOW() 
+            WHERE id = ${merchantId}`
+      )
+      return { error: errorMsg }
+    }
+
+    if (!rows || rows.length === 0) {
+      const warningMsg = 'شيت الأوردرات فارغ أو لا يحتوي على بيانات'
+      await db.execute(
+        sql`UPDATE merchants 
+            SET orders_last_sync_status = 'error', 
+                orders_last_sync_error = ${warningMsg},
+                updated_at = NOW() 
+            WHERE id = ${merchantId}`
+      )
+      return { error: warningMsg }
+    }
+
+    // 4. Parse Orders
+    // Col A (0): Order ID | Col B (1): Customer Name | Col C (2): Product Name | Col D (3): Status | Col E (4): Expected Date | Col F (5): Notes
+    const validOrdersToSync: Array<{
+      orderIdExt: string
+      customerName: string
+      productName: string
+      status: 'PENDING' | 'SHIPPED' | 'DELIVERED' | 'CANCELLED'
+      expectedDate: string
+      notes: string
+    }> = []
+
+    let unmappedStatusCount = 0
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i]
+      if (!row || row.length === 0) continue
+
+      const orderIdExt = row[0] ? String(row[0]).trim() : ''
+      if (!orderIdExt) continue
+
+      // Header row detection
+      const lowerOrderId = orderIdExt.toLowerCase()
+      if (
+        i === 0 && (
+          lowerOrderId === 'order id' ||
+          lowerOrderId === 'رقم الطلب' ||
+          lowerOrderId === 'الأوردر' ||
+          lowerOrderId === 'كود الطلب' ||
+          lowerOrderId.includes('order') ||
+          lowerOrderId.includes('طلب')
+        )
+      ) {
+        continue // Skip header row
+      }
+
+      const customerName = row[1] ? String(row[1]).trim() : ''
+      const productName = row[2] ? String(row[2]).trim() : ''
+      const rawStatus = row[3] ? String(row[3]).trim().toLowerCase() : ''
+      const expectedDate = row[4] ? String(row[4]).trim() : ''
+      const notes = row[5] ? String(row[5]).trim() : ''
+
+      // Map Status enum
+      let status: 'PENDING' | 'SHIPPED' | 'DELIVERED' | 'CANCELLED' = 'PENDING'
+
+      if (rawStatus.includes('شحن') || rawStatus.includes('طريق') || rawStatus === 'shipped') {
+        status = 'SHIPPED'
+      } else if (rawStatus.includes('تسليم') || rawStatus.includes('توصيل') || rawStatus.includes('مكتمل') || rawStatus === 'delivered') {
+        status = 'DELIVERED'
+      } else if (rawStatus.includes('ملغ') || rawStatus.includes('إلغاء') || rawStatus === 'cancelled' || rawStatus === 'canceled') {
+        status = 'CANCELLED'
+      } else if (rawStatus.includes('تجهيز') || rawStatus.includes('معالجة') || rawStatus === 'pending') {
+        status = 'PENDING'
+      } else {
+        // Fallback to PENDING if unmapped
+        status = 'PENDING'
+        if (rawStatus) unmappedStatusCount++
+      }
+
+      validOrdersToSync.push({
+        orderIdExt,
+        customerName,
+        productName,
+        status,
+        expectedDate,
+        notes
+      })
+    }
+
+    if (validOrdersToSync.length === 0) {
+      const warningMsg = 'لم يتم العثور على أرقام أوردرات في العمود الأول (A)'
+      await db.execute(
+        sql`UPDATE merchants 
+            SET orders_last_sync_status = 'error', 
+                orders_last_sync_error = ${warningMsg},
+                updated_at = NOW() 
+            WHERE id = ${merchantId}`
+      )
+      return { error: warningMsg }
+    }
+
+    // 5. Upsert Orders into DB
+    for (const ord of validOrdersToSync) {
+      await db.execute(
+        sql`INSERT INTO orders (merchant_id, order_id_external, customer_name, product_name, status, expected_date, notes, last_synced_at)
+            VALUES (${merchantId}, ${ord.orderIdExt}, ${ord.customerName || null}, ${ord.productName || null}, ${ord.status}, ${ord.expectedDate || null}, ${ord.notes || null}, NOW())
+            ON CONFLICT (merchant_id, order_id_external)
+            DO UPDATE SET
+              customer_name = EXCLUDED.customer_name,
+              product_name = EXCLUDED.product_name,
+              status = EXCLUDED.status,
+              expected_date = EXCLUDED.expected_date,
+              notes = EXCLUDED.notes,
+              last_synced_at = NOW()`
+      )
+    }
+
+    const syncNotes = unmappedStatusCount > 0 
+      ? `تمت المزامنة مع افتراض حالة "قيد التجهيز" لعدد ${unmappedStatusCount} صفوف ذات حالات غير محددة` 
+      : null
+
+    await db.execute(
+      sql`UPDATE merchants 
+          SET orders_last_synced_at = NOW(), 
+              orders_last_sync_status = 'success', 
+              orders_last_sync_error = ${syncNotes},
+              updated_at = NOW() 
+          WHERE id = ${merchantId}`
+    )
+
+    return { success: true, count: validOrdersToSync.length }
+  } catch (error: any) {
+    console.error(`syncMerchantOrders error for merchant ${merchantId}:`, error)
+    const errorMsg = error.message || 'حدث خطأ أثناء مزامنة الأوردرات'
+    await db.execute(
+      sql`UPDATE merchants 
+          SET orders_last_sync_status = 'error', 
+              orders_last_sync_error = ${errorMsg},
+              updated_at = NOW() 
+          WHERE id = ${merchantId}`
+    )
+    return { error: errorMsg }
+  }
+}

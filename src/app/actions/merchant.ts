@@ -2,6 +2,7 @@
 
 import { db } from '@/lib/db'
 import { sql } from 'drizzle-orm'
+import { extractSpreadsheetId, syncMerchantSheet, syncMerchantOrders } from '@/lib/google-sheets'
 
 // 1. Get Merchant profile
 export async function getMerchantByProfileId(profileId: string) {
@@ -262,7 +263,6 @@ export async function resolveUnansweredQuestion(questionId: string) {
 }
 
 // 7. Google Sheets Sync Actions
-import { extractSpreadsheetId, syncMerchantSheet } from '@/lib/google-sheets'
 
 export async function saveMerchantSheetLink(merchantId: string, sheetUrlOrId: string) {
   try {
@@ -322,6 +322,82 @@ export async function disconnectMerchantSheet(merchantId: string) {
   } catch (error: any) {
     console.error('disconnectMerchantSheet error:', error)
     return { error: error.message || 'فشل إلغاء ربط الشيت' }
+  }
+}
+
+// 7. Orders Google Sheets Actions
+export async function saveMerchantOrdersSheetLink(merchantId: string, sheetUrlOrId: string) {
+  try {
+    const spreadsheetId = extractSpreadsheetId(sheetUrlOrId)
+    if (!spreadsheetId) {
+      return { error: 'رابط أو ID غير صحيح لشيت جوجل الخاص بالأوردرات' }
+    }
+
+    await db.execute(
+      sql`UPDATE merchants 
+          SET orders_sheet_id = ${spreadsheetId}, 
+              orders_sync_enabled = true, 
+              updated_at = NOW() 
+          WHERE id = ${merchantId}`
+    )
+
+    const syncResult = await syncMerchantOrders(merchantId)
+    if (syncResult.error) {
+      return { success: true, spreadsheetId, warning: syncResult.error }
+    }
+
+    return { success: true, spreadsheetId, count: syncResult.count }
+  } catch (error: any) {
+    console.error('saveMerchantOrdersSheetLink error:', error)
+    return { error: error.message || 'فشل حفظ رابط شيت الأوردرات' }
+  }
+}
+
+export async function triggerManualOrdersSync(merchantId: string) {
+  try {
+    const result = await syncMerchantOrders(merchantId)
+    if (result.error) {
+      return { error: result.error }
+    }
+    return { success: true, count: result.count }
+  } catch (error: any) {
+    console.error('triggerManualOrdersSync error:', error)
+    return { error: error.message || 'فشل تشغيل مزامنة الأوردرات' }
+  }
+}
+
+export async function disconnectMerchantOrdersSheet(merchantId: string) {
+  try {
+    await db.execute(
+      sql`UPDATE merchants 
+          SET orders_sheet_id = NULL, 
+              orders_sync_enabled = false, 
+              orders_last_synced_at = NULL, 
+              orders_last_sync_status = NULL, 
+              orders_last_sync_error = NULL,
+              updated_at = NOW() 
+          WHERE id = ${merchantId}`
+    )
+    return { success: true }
+  } catch (error: any) {
+    console.error('disconnectMerchantOrdersSheet error:', error)
+    return { error: error.message || 'فشل إلغاء ربط شيت الأوردرات' }
+  }
+}
+
+export async function getMerchantOrders(merchantId: string) {
+  try {
+    const result = await db.execute(
+      sql`SELECT id, order_id_external, customer_name, product_name, status, expected_date, notes, last_synced_at 
+          FROM orders 
+          WHERE merchant_id = ${merchantId} 
+          ORDER BY last_synced_at DESC 
+          LIMIT 50`
+    )
+    return (result.rows as unknown as any[]) || []
+  } catch (error: any) {
+    console.error('getMerchantOrders error:', error)
+    return []
   }
 }
 

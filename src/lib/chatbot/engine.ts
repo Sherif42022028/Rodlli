@@ -1,7 +1,7 @@
 import { db } from '@/lib/db'
 import { sql } from 'drizzle-orm'
 import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai'
-import { searchProducts, getProductDetails, getFAQAnswer, checkWorkingHours } from './tools'
+import { searchProducts, getProductDetails, getFAQAnswer, checkWorkingHours, checkOrderStatus } from './tools'
 
 interface QuickReply {
   text: string
@@ -233,6 +233,18 @@ export class ChatbotEngine {
               },
               required: ['merchantId']
             }
+          },
+          {
+            name: 'checkOrderStatus',
+            description: 'Check status, delivery estimate, and notes for a customer order by order ID.',
+            parameters: {
+              type: SchemaType.OBJECT,
+              properties: {
+                orderId: { type: SchemaType.STRING, description: 'The order ID string e.g. RD-1032 or 1032' },
+                merchantId: { type: SchemaType.STRING, description: 'The merchant database UUID' }
+              },
+              required: ['orderId', 'merchantId']
+            }
           }
         ]
       }
@@ -298,6 +310,9 @@ export class ChatbotEngine {
       } else if (call.name === 'checkWorkingHours') {
         resultData = await checkWorkingHours(args.merchantId as string || this.merchantId)
         await this.logToolCall('checkWorkingHours', {}, conversationId, null)
+      } else if (call.name === 'checkOrderStatus') {
+        resultData = await checkOrderStatus(args.orderId as string, args.merchantId as string || this.merchantId)
+        await this.logToolCall('checkOrderStatus', { orderId: args.orderId }, conversationId, null)
       }
 
       response = await chat.sendMessage([
@@ -413,6 +428,21 @@ export class ChatbotEngine {
             required: ['merchantId']
           }
         }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'checkOrderStatus',
+          description: 'Check status, delivery estimate, and notes for a customer order by order ID.',
+          parameters: {
+            type: 'object',
+            properties: {
+              orderId: { type: 'string', description: 'The order ID string e.g. RD-1032 or 1032' },
+              merchantId: { type: 'string', description: 'The merchant database UUID' }
+            },
+            required: ['orderId', 'merchantId']
+          }
+        }
       }
     ]
 
@@ -485,6 +515,9 @@ export class ChatbotEngine {
         } else if (callName === 'checkWorkingHours') {
           resultData = await checkWorkingHours(callArgs.merchantId || this.merchantId)
           await this.logToolCall('checkWorkingHours', {}, conversationId, null)
+        } else if (callName === 'checkOrderStatus') {
+          resultData = await checkOrderStatus(callArgs.orderId, callArgs.merchantId || this.merchantId)
+          await this.logToolCall('checkOrderStatus', { orderId: callArgs.orderId }, conversationId, null)
         }
 
         messages.push({
@@ -566,6 +599,37 @@ export class ChatbotEngine {
       }
     } catch (e) {
       console.error('Local product match error:', e)
+    }
+
+    // 0.5 Order Status Direct Check & Pattern Extraction
+    const isOrderQuery = this.matchesKeywords(lowerMsg, ['order', 'status', 'track', 'أوردر', 'طلب', 'شحن', 'متابعة', 'فين', 'رقم']) || lowerMsg.includes('#')
+    if (isOrderQuery) {
+      // Regex pattern to extract order ID (e.g. RD-1032, ORD-123, #1032, 1032)
+      const orderMatch = lowerMsg.match(/(?:(?:order|أوردر|طلب|رقم|كود|#)\s*:?\s*)?([a-z0-9_-]{3,20})/i)
+      if (orderMatch && orderMatch[1]) {
+        const potentialOrderId = orderMatch[1].trim()
+        const orderData = await checkOrderStatus(potentialOrderId, this.merchantId)
+        if (orderData.found) {
+          await this.logToolCall('checkOrderStatus', { orderId: potentialOrderId }, conversationId, null)
+          const dateStr = orderData.expectedDate ? (language === 'en' ? `\n*Expected Date:* ${orderData.expectedDate}` : `\n*التاريخ المتوقع:* ${orderData.expectedDate}`) : ''
+          const custStr = orderData.customerName ? (language === 'en' ? `\n*Customer:* ${orderData.customerName}` : `\n*العميل:* ${orderData.customerName}`) : ''
+          const prodStr = orderData.productName ? (language === 'en' ? `\n*Product:* ${orderData.productName}` : `\n*المنتج:* ${orderData.productName}`) : ''
+          const notesStr = orderData.notes ? (language === 'en' ? `\n*Notes:* ${orderData.notes}` : `\n*ملاحظات:* ${orderData.notes}`) : ''
+
+          const statusLabel = language === 'en' ? orderData.statusEn : orderData.statusAr
+
+          return {
+            text: language === 'en'
+              ? `📦 *Order Status Update*\n\n*Order ID:* ${orderData.orderId}\n*Status:* ${statusLabel}${custStr}${prodStr}${dateStr}${notesStr}`
+              : `📦 *حالة الطلب*\n\n*رقم الأوردر:* ${orderData.orderId}\n*الحالة:* ${statusLabel}${custStr}${prodStr}${dateStr}${notesStr}`,
+            type: 'text',
+            confident: true,
+            quickReplies: [
+              { text: "View Products Catalog", textAr: "كتالوج المنتجات", action: 'show_menu' }
+            ]
+          }
+        }
+      }
     }
 
     // 1. Greetings
