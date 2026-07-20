@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslation } from '@/components/layout/I18nProvider'
-import { upsertMerchant, addProduct, deleteProduct, addFAQ, deleteFAQ, updateWorkingHours, resolveUnansweredQuestion, saveMerchantSheetLink, triggerManualSheetSync, disconnectMerchantSheet } from '@/app/actions/merchant'
+import { upsertMerchant, addProduct, deleteProduct, deleteProductsBulk, deleteAllMerchantProducts, addFAQ, deleteFAQ, updateWorkingHours, resolveUnansweredQuestion, saveMerchantSheetLink, triggerManualSheetSync, disconnectMerchantSheet } from '@/app/actions/merchant'
 import { getAnalyticsTrend } from '@/app/actions/analytics'
 import { 
   Store, ShoppingBag, HelpCircle, Clock, Link2, Copy, ExternalLink, 
@@ -98,12 +98,14 @@ export default function MerchantDashboardClient({
   const [websiteUrl, setWebsiteUrl] = useState(merchant.website_url || '')
   const [botAvatarUrl, setBotAvatarUrl] = useState(merchant.bot_avatar_url || '')
 
-  // 2. Add Product State
+  // 2. Add Product & Bulk Selection State
   const [showAddProduct, setShowAddProduct] = useState(false)
   const [pName, setPName] = useState('')
   const [pPrice, setPPrice] = useState('')
   const [pDescription, setPDescription] = useState('')
   const [pImageUrl, setPImageUrl] = useState('')
+  const [selectedProductIds, setSelectedProductIds] = useState<string[]>([])
+  const [deletingBulk, setDeletingBulk] = useState(false)
 
   // 3. Add FAQ State
   const [showAddFAQ, setShowAddFAQ] = useState(false)
@@ -208,8 +210,72 @@ export default function MerchantDashboardClient({
     if (res.error) {
       showMessage(null, res.error)
     } else {
+      setSelectedProductIds(prev => prev.filter(pId => pId !== id))
       showMessage(
         language === 'en' ? 'Product deleted' : 'تم حذف المنتج',
+        null
+      )
+      router.refresh()
+    }
+  }
+
+  const toggleSelectProduct = (id: string) => {
+    setSelectedProductIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    )
+  }
+
+  const toggleSelectAllProducts = () => {
+    if (selectedProductIds.length === initialProducts.length) {
+      setSelectedProductIds([])
+    } else {
+      setSelectedProductIds(initialProducts.map((p) => p.id))
+    }
+  }
+
+  const handleDeleteSelectedProducts = async () => {
+    if (selectedProductIds.length === 0) return
+    const confirmMsg =
+      language === 'en'
+        ? `Are you sure you want to delete ${selectedProductIds.length} selected products?`
+        : `هل أنت متأكد من مسح ${selectedProductIds.length} منتجات محددة كلياً؟`
+    if (!confirm(confirmMsg)) return
+
+    setDeletingBulk(true)
+    const res = await deleteProductsBulk(selectedProductIds, merchant.id)
+    setDeletingBulk(false)
+
+    if (res.error) {
+      showMessage(null, res.error)
+    } else {
+      setSelectedProductIds([])
+      showMessage(
+        language === 'en'
+          ? `Deleted ${res.count} products successfully.`
+          : `تم مسح ${res.count} منتجات بنجاح.`,
+        null
+      )
+      router.refresh()
+    }
+  }
+
+  const handleDeleteAllProducts = async () => {
+    const confirmMsg =
+      language === 'en'
+        ? `WARNING: Are you sure you want to delete ALL ${initialProducts.length} products permanently?`
+        : `تحذير: هل أنت متأكد من مسح جميع المنتجات (${initialProducts.length}) كلياً؟ لا يمكن التراجع عن هذا الإجراء.`
+    if (!confirm(confirmMsg)) return
+
+    setDeletingBulk(true)
+    const res = await deleteAllMerchantProducts(merchant.id)
+    setDeletingBulk(false)
+
+    if (res.error) {
+      showMessage(null, res.error)
+    } else {
+      setSelectedProductIds([])
+      showMessage(
+        language === 'en' ? 'All products deleted.' : 'تم مسح كافة المنتجات بنجاح.',
         null
       )
       router.refresh()
@@ -1001,6 +1067,50 @@ export default function MerchantDashboardClient({
               </form>
             )}
 
+            {initialProducts.length > 0 && (
+              <div className="flex flex-wrap items-center justify-between gap-3 bg-cream-50/80 p-3.5 rounded-2xl border border-dark-100 text-xs">
+                <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-2 font-bold text-dark-800 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={selectedProductIds.length === initialProducts.length && initialProducts.length > 0}
+                      onChange={toggleSelectAllProducts}
+                      className="w-4 h-4 rounded text-primary-500 focus:ring-primary-500 cursor-pointer"
+                    />
+                    {language === 'en' ? 'Select All' : 'تحديد الكل'} ({initialProducts.length})
+                  </label>
+
+                  {selectedProductIds.length > 0 && (
+                    <span className="bg-primary-50 text-primary-700 font-bold px-2.5 py-0.5 rounded-full border border-primary-100">
+                      {language === 'en' ? `${selectedProductIds.length} Selected` : `تم تحديد ${selectedProductIds.length}`}
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {selectedProductIds.length > 0 && (
+                    <button
+                      onClick={handleDeleteSelectedProducts}
+                      disabled={deletingBulk}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm disabled:opacity-50"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      {language === 'en' ? `Delete Selected (${selectedProductIds.length})` : `مسح المنتجات المحددة (${selectedProductIds.length})`}
+                    </button>
+                  )}
+
+                  <button
+                    onClick={handleDeleteAllProducts}
+                    disabled={deletingBulk}
+                    className="flex items-center gap-1.5 px-3 py-1.5 border border-red-200 text-red-600 hover:bg-red-50 rounded-xl text-xs font-bold transition-all disabled:opacity-50"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    {language === 'en' ? 'Delete All' : 'مسح كافة المنتجات'}
+                  </button>
+                </div>
+              </div>
+            )}
+
             {initialProducts.length === 0 ? (
               <div className="text-center py-12 text-dark-500">
                 <ShoppingBag className="w-12 h-12 mx-auto text-dark-300 mb-2" />
@@ -1008,27 +1118,47 @@ export default function MerchantDashboardClient({
               </div>
             ) : (
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {initialProducts.map((p) => (
-                  <div key={p.id} className="border border-dark-100 rounded-2xl p-4 flex flex-col justify-between hover:shadow-sm">
-                    <div>
-                      <div className="flex justify-between items-start gap-2 mb-2">
-                        <h4 className="font-bold text-dark-950 truncate">{p.name}</h4>
-                        <span className="text-xs font-semibold text-primary-600 bg-primary-50 px-2 py-0.5 rounded-full">${p.price}</span>
+                {initialProducts.map((p) => {
+                  const isSelected = selectedProductIds.includes(p.id)
+                  return (
+                    <div
+                      key={p.id}
+                      className={`border rounded-2xl p-4 flex flex-col justify-between transition-all ${
+                        isSelected 
+                          ? 'border-primary-500 bg-primary-50/20 ring-1 ring-primary-500 shadow-sm' 
+                          : 'border-dark-100 hover:shadow-sm bg-white'
+                      }`}
+                    >
+                      <div>
+                        <div className="flex justify-between items-start gap-2 mb-2">
+                          <div className="flex items-center gap-2 overflow-hidden">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => toggleSelectProduct(p.id)}
+                              className="w-4 h-4 rounded text-primary-500 focus:ring-primary-500 cursor-pointer shrink-0"
+                            />
+                            <h4 className="font-bold text-dark-950 truncate">{p.name}</h4>
+                          </div>
+                          <span className="text-xs font-semibold text-primary-600 bg-primary-50 px-2 py-0.5 rounded-full shrink-0">${p.price}</span>
+                        </div>
+                        <p className="text-xs text-dark-600 line-clamp-2 mb-4">{p.description || 'No description'}</p>
                       </div>
-                      <p className="text-xs text-dark-600 line-clamp-2 mb-4">{p.description || 'No description'}</p>
+                      <div className="flex justify-between items-center border-t border-dark-50 pt-2 text-xs">
+                        <span className={`text-[10px] ${p.is_active !== false ? 'text-emerald-600 font-bold' : 'text-dark-400'}`}>
+                          {p.is_active !== false ? (language === 'en' ? 'Active' : 'نشط') : (language === 'en' ? 'Disabled' : 'معطل')}
+                        </span>
+                        <button
+                          onClick={() => handleDeleteProduct(p.id)}
+                          className="text-red-500 hover:text-red-600 flex items-center gap-1 font-semibold"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          Delete
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex justify-between items-center border-t border-dark-50 pt-2 text-xs">
-                      <span className="text-[10px] text-dark-400">Active</span>
-                      <button
-                        onClick={() => handleDeleteProduct(p.id)}
-                        className="text-red-500 hover:text-red-600 flex items-center gap-1 font-semibold"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </div>

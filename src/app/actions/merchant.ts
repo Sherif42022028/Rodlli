@@ -127,6 +127,35 @@ export async function deleteProduct(productId: string) {
   }
 }
 
+export async function deleteProductsBulk(productIds: string[], merchantId: string) {
+  if (!productIds || productIds.length === 0) {
+    return { error: 'No products selected' }
+  }
+  try {
+    for (const pId of productIds) {
+      await db.execute(
+        sql`DELETE FROM products WHERE id = ${pId} AND merchant_id = ${merchantId}`
+      )
+    }
+    return { success: true, count: productIds.length }
+  } catch (error: any) {
+    console.error('deleteProductsBulk error:', error)
+    return { error: error.message || 'Failed to delete selected products' }
+  }
+}
+
+export async function deleteAllMerchantProducts(merchantId: string) {
+  try {
+    await db.execute(
+      sql`DELETE FROM products WHERE merchant_id = ${merchantId}`
+    )
+    return { success: true }
+  } catch (error: any) {
+    console.error('deleteAllMerchantProducts error:', error)
+    return { error: error.message || 'Failed to delete all products' }
+  }
+}
+
 // 4. FAQs Operations
 export async function getFAQs(merchantId: string) {
   try {
