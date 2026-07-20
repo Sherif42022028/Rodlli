@@ -741,7 +741,7 @@ export default function OnboardingWizard({
                   </div>
                   <div className="flex items-center gap-3 shrink-0">
                     <span className="text-xs font-bold text-primary-600 bg-primary-50 px-2 py-0.5 rounded-full">
-                      ${product.price}
+                      {product.price} ج.م
                     </span>
                     <button
                       onClick={() => handleDeleteProduct(product.id)}

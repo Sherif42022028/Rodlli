@@ -553,8 +553,8 @@ export class ChatbotEngine {
 
           return {
             text: language === 'en'
-              ? `Here is the product info:\n\n*Product:* ${p.name}\n*Price:* $${p.price}${colorsStr}${sizesStr}\n*Description:* ${p.description || 'No description available.'}`
-              : `إليك تفاصيل المنتج:\n\n*المنتج:* ${p.name}\n*السعر:* ${p.price}$${colorsStr}${sizesStr}\n*الوصف:* ${p.description || 'لا يوجد وصف متاح.'}`,
+              ? `Here is the product info:\n\n*Product:* ${p.name}\n*Price:* ${p.price} EGP${colorsStr}${sizesStr}\n*Description:* ${p.description || 'No description available.'}`
+              : `إليك تفاصيل المنتج:\n\n*المنتج:* ${p.name}\n*السعر:* ${p.price} ج.م${colorsStr}${sizesStr}\n*الوصف:* ${p.description || 'لا يوجد وصف متاح.'}`,
             type: 'products',
             data: [p],
             confident: true,

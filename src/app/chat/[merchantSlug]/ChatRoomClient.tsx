@@ -302,7 +302,7 @@ export default function ChatRoomClient({
                       <div className="flex-1 min-w-0">
                         <div className="flex justify-between items-start gap-2 mb-0.5">
                           <span className="font-semibold text-xs text-dark-950 truncate">{p.name}</span>
-                          <span className="text-xs font-bold text-primary-600 shrink-0">${p.price}</span>
+                          <span className="text-xs font-bold text-primary-600 shrink-0">{p.price} ج.م</span>
                         </div>
                         {p.description && <p className="text-[10px] text-dark-500 line-clamp-2">{p.description}</p>}
                         {p.image_urls && p.image_urls.length > 0 && p.image_urls[0] && (
@@ -421,7 +421,7 @@ export default function ChatRoomClient({
                             )}
                             <div className="flex-1 min-w-0">
                               <h5 className="font-bold text-xs text-dark-950 truncate">{p.name}</h5>
-                              <p className="text-[10px] text-primary-600 font-bold">${p.price}</p>
+                              <p className="text-[10px] text-primary-600 font-bold">{p.price} ج.م</p>
                               {p.image_urls && p.image_urls.length > 0 && p.image_urls[0] && (
                                 <a 
                                   href={p.image_urls[0]} 

@@ -1140,7 +1140,7 @@ export default function MerchantDashboardClient({
                             />
                             <h4 className="font-bold text-dark-950 truncate">{p.name}</h4>
                           </div>
-                          <span className="text-xs font-semibold text-primary-600 bg-primary-50 px-2 py-0.5 rounded-full shrink-0">${p.price}</span>
+                          <span className="text-xs font-semibold text-primary-600 bg-primary-50 px-2 py-0.5 rounded-full shrink-0">{p.price} ج.م</span>
                         </div>
                         <p className="text-xs text-dark-600 line-clamp-2 mb-4">{p.description || 'No description'}</p>
                       </div>
