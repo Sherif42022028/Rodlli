@@ -26,7 +26,10 @@ export async function GET(request: NextRequest) {
       JSON.stringify({ merchantId: merchant.id, redirectTo })
     ).toString('base64url')
 
-    const authUrl = getGoogleAuthUrl(stateParam)
+    const origin = new URL(request.url).origin
+    const redirectUri = `${origin}/api/auth/google-sheets/callback`
+
+    const authUrl = getGoogleAuthUrl(stateParam, redirectUri)
     return NextResponse.redirect(authUrl)
   } catch (error: any) {
     console.error('Google Sheets Connect Route Error:', error)

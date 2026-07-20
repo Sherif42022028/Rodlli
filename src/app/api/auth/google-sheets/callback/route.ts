@@ -42,7 +42,9 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const tokens = await exchangeCodeForTokens(code)
+    const origin = new URL(request.url).origin
+    const redirectUri = `${origin}/api/auth/google-sheets/callback`
+    const tokens = await exchangeCodeForTokens(code, redirectUri)
     
     if (!tokens.refresh_token) {
       console.warn('Google OAuth returned no refresh_token. Prompt=consent should ensure this.')
