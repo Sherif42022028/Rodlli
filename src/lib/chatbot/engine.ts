@@ -540,7 +540,7 @@ export class ChatbotEngine {
     // 0. Product Name Direct Match
     try {
       const productResult = await db.execute(
-        sql`SELECT id, name, price, description, image_urls FROM products WHERE merchant_id = ${this.merchantId} AND is_active = true`
+        sql`SELECT id, name, price, description, image_urls, colors, sizes, category_name FROM products WHERE merchant_id = ${this.merchantId} AND is_active = true`
       )
       const products = productResult.rows as unknown as any[]
       
@@ -548,10 +548,13 @@ export class ChatbotEngine {
         const prodName = p.name.toLowerCase()
         if (lowerMsg.includes(prodName)) {
           await this.logToolCall('getProductDetails', { productId: p.id }, conversationId, p.id)
+          const colorsStr = p.colors ? (language === 'en' ? `\n*Colors:* ${p.colors}` : `\n*الألوان:* ${p.colors}`) : ''
+          const sizesStr = p.sizes ? (language === 'en' ? `\n*Sizes:* ${p.sizes}` : `\n*المقاسات:* ${p.sizes}`) : ''
+
           return {
             text: language === 'en'
-              ? `Here is the product info:\n\n*Product Name:* ${p.name}\n*Price:* $${p.price}\n*Description:* ${p.description || 'No description available.'}`
-              : `إليك معلومات المنتج:\n\n*اسم المنتج:* ${p.name}\n*السعر:* ${p.price}$\n*الوصف:* ${p.description || 'لا يوجد وصف متاح.'}`,
+              ? `Here is the product info:\n\n*Product:* ${p.name}\n*Price:* $${p.price}${colorsStr}${sizesStr}\n*Description:* ${p.description || 'No description available.'}`
+              : `إليك تفاصيل المنتج:\n\n*المنتج:* ${p.name}\n*السعر:* ${p.price}$${colorsStr}${sizesStr}\n*الوصف:* ${p.description || 'لا يوجد وصف متاح.'}`,
             type: 'products',
             data: [p],
             confident: true,

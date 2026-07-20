@@ -189,13 +189,16 @@ export async function syncMerchantSheet(merchantId: string) {
 
     // 5. Parse and Validate Rows
     // Expected structure:
-    // Col A (0): Name | Col B (1): Price | Col C (2): Description | Col D (3): Available (نعم/لا) | Col E (4): Image URL
+    // Col A (0): Name | Col B (1): Price | Col C (2): Description | Col D (3): Available (نعم/لا) | Col E (4): Image URL | Col F (5): Colors | Col G (6): Sizes | Col H (7): Category
     const validProductsToSync: Array<{
       name: string
       price: number
       description: string
       inStock: boolean
       imageUrl: string
+      colors: string
+      sizes: string
+      categoryName: string
     }> = []
 
     for (let i = 0; i < rows.length; i++) {
@@ -241,13 +244,19 @@ export async function syncMerchantSheet(merchantId: string) {
       )
 
       const imageUrl = row[4] ? String(row[4]).trim() : ''
+      const colors = row[5] ? String(row[5]).trim() : ''
+      const sizes = row[6] ? String(row[6]).trim() : ''
+      const categoryName = row[7] ? String(row[7]).trim() : ''
 
       validProductsToSync.push({
         name: rawName,
         price: priceNum,
         description,
         inStock,
-        imageUrl
+        imageUrl,
+        colors,
+        sizes,
+        categoryName
       })
     }
 
@@ -292,14 +301,17 @@ export async function syncMerchantSheet(merchantId: string) {
               SET price = ${prodItem.price}, 
                   description = ${prodItem.description || existing.description || null},
                   image_urls = ${prodItem.imageUrl ? arrayLiteral : existing.image_urls},
-                  is_active = ${prodItem.inStock}
+                  is_active = ${prodItem.inStock},
+                  colors = ${prodItem.colors || null},
+                  sizes = ${prodItem.sizes || null},
+                  category_name = ${prodItem.categoryName || null}
               WHERE id = ${existing.id}`
         )
       } else {
         // Add new product
         const insertRes = await db.execute(
-          sql`INSERT INTO products (merchant_id, name, price, description, image_urls, is_active)
-              VALUES (${merchantId}, ${prodItem.name}, ${prodItem.price}, ${prodItem.description || null}, ${arrayLiteral}, ${prodItem.inStock})
+          sql`INSERT INTO products (merchant_id, name, price, description, image_urls, is_active, colors, sizes, category_name)
+              VALUES (${merchantId}, ${prodItem.name}, ${prodItem.price}, ${prodItem.description || null}, ${arrayLiteral}, ${prodItem.inStock}, ${prodItem.colors || null}, ${prodItem.sizes || null}, ${prodItem.categoryName || null})
               RETURNING id`
         )
         const insertedRows = insertRes.rows as unknown as any[]
