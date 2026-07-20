@@ -105,7 +105,7 @@ export async function getAccessTokenFromRefreshToken(encryptedRefreshToken: stri
 /**
  * Reads row values from Google Sheets API v4.
  */
-export async function fetchSheetRows(spreadsheetId: string, accessToken: string, range = 'A2:E1000'): Promise<string[][]> {
+export async function fetchSheetRows(spreadsheetId: string, accessToken: string, range = 'A1:Z1000'): Promise<string[][]> {
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}`
   const response = await fetch(url, {
     headers: {
@@ -157,10 +157,10 @@ export async function syncMerchantSheet(merchantId: string) {
       return { error: errorMsg }
     }
 
-    // 3. Fetch Sheet Rows
+    // 3. Fetch Sheet Rows (A1:Z1000)
     let rows: string[][] = []
     try {
-      rows = await fetchSheetRows(merchant.google_sheet_id, accessToken)
+      rows = await fetchSheetRows(merchant.google_sheet_id, accessToken, 'A1:Z1000')
     } catch (sheetError: any) {
       console.error(`Sync Sheet Fetch Error for merchant ${merchantId}:`, sheetError)
       const errorMsg = `فشل قراءة بيانات الشيت: ${sheetError.message || 'تأكد من وجود الشيت ومشاركته'}`
@@ -198,8 +198,6 @@ export async function syncMerchantSheet(merchantId: string) {
       imageUrl: string
     }> = []
 
-    let invalidRowCount = 0
-
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i]
       if (!row || row.length === 0) continue
@@ -207,14 +205,27 @@ export async function syncMerchantSheet(merchantId: string) {
       const rawName = row[0] ? String(row[0]).trim() : ''
       if (!rawName) continue // Skip blank name rows
 
+      // Header row detection
+      const lowerName = rawName.toLowerCase()
+      if (
+        i === 0 && (
+          lowerName === 'اسم المنتج' || 
+          lowerName === 'الاسم' || 
+          lowerName === 'name' || 
+          lowerName === 'product' || 
+          lowerName === 'product name' ||
+          lowerName.includes('اسم')
+        )
+      ) {
+        continue // Skip header line
+      }
+
       const rawPrice = row[1] ? String(row[1]).trim() : ''
       // Clean non-numeric except dot
       const cleanedPriceStr = rawPrice.replace(/[^0-9.]/g, '')
-      const priceNum = parseFloat(cleanedPriceStr)
-
+      let priceNum = parseFloat(cleanedPriceStr)
       if (isNaN(priceNum) || priceNum < 0) {
-        invalidRowCount++
-        continue
+        priceNum = 0 // Fallback price 0 if unparseable
       }
 
       const description = row[2] ? String(row[2]).trim() : ''
@@ -241,7 +252,7 @@ export async function syncMerchantSheet(merchantId: string) {
     }
 
     if (validProductsToSync.length === 0) {
-      const warningMsg = 'لم يتم العثور على منتجات صالحة للبدء بالمزامنة'
+      const warningMsg = 'لم يتم العثور على أسماء منتجات في العمود الأول (A). تأكد من إضافة اسم المنتج في العمود الأول.'
       await db.execute(
         sql`UPDATE merchants 
             SET last_sync_status = 'error', 
@@ -308,7 +319,7 @@ export async function syncMerchantSheet(merchantId: string) {
     }
 
     // 9. Update merchant sync metadata
-    const syncNotes = invalidRowCount > 0 ? `تمت المزامنة بنجاح مع تجاهل ${invalidRowCount} صفوف غير صالحة` : null
+    const syncNotes = null
 
     await db.execute(
       sql`UPDATE merchants 
