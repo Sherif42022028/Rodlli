@@ -93,9 +93,11 @@ export default function HomeMascot3D() {
           camera={{ position: [0, 0, 3.5], fov: 40 }}
           dpr={[1, 2]} // يحافظ على وضوح الموديل على شاشات retina من غير ما يبالغ في الأداء
         >
-          <ambientLight intensity={0.7} />
-          <directionalLight position={[3, 4, 3]} intensity={1.1} />
-          <directionalLight position={[-3, 2, -2]} intensity={0.3} />
+          <ambientLight intensity={1.8} />
+          <directionalLight position={[4, 5, 4]} intensity={2.5} />
+          <directionalLight position={[-4, 3, 2]} intensity={1.5} />
+          <pointLight position={[0, 1, 3]} intensity={1.8} />
+          <pointLight position={[0, -2, 2]} intensity={0.8} />
           <AnimatedMascot />
         </Canvas>
       </Suspense>
