@@ -231,3 +231,68 @@ export async function resolveUnansweredQuestion(questionId: string) {
     return { error: error.message || 'Failed to resolve question' }
   }
 }
+
+// 7. Google Sheets Sync Actions
+import { extractSpreadsheetId, syncMerchantSheet } from '@/lib/google-sheets'
+
+export async function saveMerchantSheetLink(merchantId: string, sheetUrlOrId: string) {
+  try {
+    const spreadsheetId = extractSpreadsheetId(sheetUrlOrId)
+    if (!spreadsheetId) {
+      return { error: 'رابط أو معرّف Google Sheet غير صحيح. يرجى التأكد من اختيار رابط صفحة الشيت الحقيقي.' }
+    }
+
+    await db.execute(
+      sql`UPDATE merchants 
+          SET google_sheet_id = ${spreadsheetId}, 
+              sheet_sync_enabled = true,
+              updated_at = NOW() 
+          WHERE id = ${merchantId}`
+    )
+
+    // Trigger immediate first sync
+    const syncResult = await syncMerchantSheet(merchantId)
+    if (syncResult.error) {
+      return { success: true, spreadsheetId, warning: syncResult.error }
+    }
+
+    return { success: true, spreadsheetId, count: syncResult.count }
+  } catch (error: any) {
+    console.error('saveMerchantSheetLink error:', error)
+    return { error: error.message || 'فشل حفظ رابط الشيت' }
+  }
+}
+
+export async function triggerManualSheetSync(merchantId: string) {
+  try {
+    const result = await syncMerchantSheet(merchantId)
+    if (result.error) {
+      return { error: result.error }
+    }
+    return { success: true, count: result.count }
+  } catch (error: any) {
+    console.error('triggerManualSheetSync error:', error)
+    return { error: error.message || 'فشل تشغيل المزامنة' }
+  }
+}
+
+export async function disconnectMerchantSheet(merchantId: string) {
+  try {
+    await db.execute(
+      sql`UPDATE merchants 
+          SET google_sheet_id = NULL, 
+              google_refresh_token = NULL, 
+              sheet_sync_enabled = false, 
+              last_synced_at = NULL, 
+              last_sync_status = NULL, 
+              last_sync_error = NULL,
+              updated_at = NOW() 
+          WHERE id = ${merchantId}`
+    )
+    return { success: true }
+  } catch (error: any) {
+    console.error('disconnectMerchantSheet error:', error)
+    return { error: error.message || 'فشل إلغاء ربط الشيت' }
+  }
+}
+

@@ -30,6 +30,12 @@ CREATE TABLE IF NOT EXISTS merchants (
     bot_avatar_url TEXT, -- Bot icon image URL
     category_id UUID REFERENCES categories(id) ON DELETE SET NULL,
     onboarding_step INTEGER DEFAULT 1,
+    google_sheet_id TEXT,
+    google_refresh_token TEXT, -- Encrypted refresh token
+    sheet_sync_enabled BOOLEAN DEFAULT false,
+    last_synced_at TIMESTAMPTZ,
+    last_sync_status TEXT, -- 'success' | 'error' | 'pending'
+    last_sync_error TEXT,
     is_online BOOLEAN DEFAULT true,
     is_active BOOLEAN DEFAULT true,
     created_at TIMESTAMPTZ DEFAULT NOW(),

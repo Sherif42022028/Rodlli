@@ -3,12 +3,12 @@
 import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslation } from '@/components/layout/I18nProvider'
-import { upsertMerchant, addProduct, deleteProduct, addFAQ, deleteFAQ, updateWorkingHours, resolveUnansweredQuestion } from '@/app/actions/merchant'
+import { upsertMerchant, addProduct, deleteProduct, addFAQ, deleteFAQ, updateWorkingHours, resolveUnansweredQuestion, saveMerchantSheetLink, triggerManualSheetSync, disconnectMerchantSheet } from '@/app/actions/merchant'
 import { getAnalyticsTrend } from '@/app/actions/analytics'
 import { 
   Store, ShoppingBag, HelpCircle, Clock, Link2, Copy, ExternalLink, 
   Trash2, Plus, Edit2, Check, AlertCircle, RefreshCw, MessageSquareWarning,
-  BarChart3, TrendingUp, MessageSquare, Percent
+  BarChart3, TrendingUp, MessageSquare, Percent, FileSpreadsheet
 } from 'lucide-react'
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts'
 
@@ -38,12 +38,17 @@ export default function MerchantDashboardClient({
   const { language, t } = useTranslation()
   const router = useRouter()
 
-  const [activeTab, setActiveTab] = useState<'info' | 'products' | 'faq' | 'hours' | 'link' | 'unanswered' | 'analytics'>('info')
+  const [activeTab, setActiveTab] = useState<'info' | 'products' | 'faq' | 'hours' | 'link' | 'unanswered' | 'analytics' | 'sheets'>('info')
   const [loading, setLoading] = useState(false)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   
   const [pendingResolveId, setPendingResolveId] = useState<string | null>(null)
+
+  // Google Sheets state
+  const [sheetInputUrl, setSheetInputUrl] = useState(merchant.google_sheet_id ? `https://docs.google.com/spreadsheets/d/${merchant.google_sheet_id}` : '')
+  const [savingSheet, setSavingSheet] = useState(false)
+  const [syncingSheet, setSyncingSheet] = useState(false)
 
   // Analytics states
   const [trendRange, setTrendRange] = useState<'7d' | '30d'>('7d')
@@ -53,7 +58,20 @@ export default function MerchantDashboardClient({
 
   useEffect(() => {
     setMounted(true)
-  }, [])
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search)
+      if (params.get('tab') === 'sheets' || params.get('tab') === 'products') {
+        setActiveTab(params.get('tab') === 'sheets' ? 'sheets' : 'products')
+      }
+      if (params.get('sheet_connected') === 'true') {
+        setActiveTab('sheets')
+        setSuccessMsg(language === 'en' ? 'Google Sheets account connected successfully! Now paste your sheet link below.' : 'تم ربط حساب Google Sheets بنجاح! يمكنك الآن لصق رابط الشيت بالأسفل.')
+      }
+      if (params.get('error')) {
+        setErrorMsg(language === 'en' ? 'Failed to connect Google Sheets. Please try again.' : 'فشل الربط بـ Google Sheets. يرجى إعادة المحاولة.')
+      }
+    }
+  }, [language])
 
   useEffect(() => {
     async function fetchNewTrend() {
@@ -275,6 +293,66 @@ export default function MerchantDashboardClient({
     )
   }
 
+  const handleConnectGoogleSheets = () => {
+    window.location.href = '/api/auth/google-sheets/connect?redirect_to=dashboard'
+  }
+
+  const handleSaveSheetLink = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!sheetInputUrl.trim()) return
+    setSavingSheet(true)
+    const res = await saveMerchantSheetLink(merchant.id, sheetInputUrl)
+    setSavingSheet(false)
+    if (res.error) {
+      showMessage(null, res.error)
+    } else {
+      if (res.warning) {
+        showMessage(
+          language === 'en' ? `Sheet link saved with warning: ${res.warning}` : `تم حفظ رابط الشيت مع تحذير: ${res.warning}`,
+          null
+        )
+      } else {
+        showMessage(
+          language === 'en' ? `Sheet linked successfully! Synced ${res.count} products.` : `تم ربط الشيت ومزامنة ${res.count} منتجات بنجاح!`,
+          null
+        )
+      }
+      router.refresh()
+    }
+  }
+
+  const handleManualSyncSheet = async () => {
+    setSyncingSheet(true)
+    const res = await triggerManualSheetSync(merchant.id)
+    setSyncingSheet(false)
+    if (res.error) {
+      showMessage(null, res.error)
+    } else {
+      showMessage(
+        language === 'en' ? `Catalog synced successfully! Total ${res.count} products active.` : `تمت مزامنة الكتالوج بنجاح! إجمالي ${res.count} منتجات نشطة.`,
+        null
+      )
+      router.refresh()
+    }
+  }
+
+  const handleDisconnectSheet = async () => {
+    if (!confirm(language === 'en' ? 'Are you sure you want to disconnect Google Sheets?' : 'هل أنت متأكد من إلغاء ربط Google Sheets؟')) return
+    setLoading(true)
+    const res = await disconnectMerchantSheet(merchant.id)
+    setLoading(false)
+    if (res.error) {
+      showMessage(null, res.error)
+    } else {
+      setSheetInputUrl('')
+      showMessage(
+        language === 'en' ? 'Google Sheets disconnected.' : 'تم إلغاء ربط Google Sheets.',
+        null
+      )
+      router.refresh()
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Tab controls */}
@@ -307,6 +385,19 @@ export default function MerchantDashboardClient({
         >
           <ShoppingBag className="w-4 h-4" />
           {language === 'en' ? 'Products' : 'المنتجات'}
+        </button>
+
+        <button
+          onClick={() => setActiveTab('sheets')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors ${
+            activeTab === 'sheets' ? 'bg-primary-500 text-white shadow-sm' : 'hover:bg-cream-100 text-dark-600'
+          }`}
+        >
+          <FileSpreadsheet className="w-4 h-4" />
+          {language === 'en' ? 'Google Sheets Sync' : 'مزامنة Google Sheets'}
+          {merchant.sheet_sync_enabled && (
+            <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0 animate-pulse" />
+          )}
         </button>
 
         <button
@@ -796,6 +887,42 @@ export default function MerchantDashboardClient({
         {/* Tab 2: Products */}
         {activeTab === 'products' && (
           <div className="space-y-6">
+            {/* Google Sheets Sync Quick Banner */}
+            <div className="bg-gradient-to-r from-emerald-900 to-dark-900 text-white p-5 rounded-3xl shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-white/10 flex items-center justify-center text-emerald-400 shrink-0">
+                  <FileSpreadsheet className="w-6 h-6" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-sm text-white flex items-center gap-2">
+                    {language === 'en' ? 'Sync Products via Google Sheets' : 'مزامنة المنتجات عبر Google Sheets'}
+                    {merchant.sheet_sync_enabled ? (
+                      <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] px-2 py-0.5 rounded-full font-semibold">
+                        {language === 'en' ? 'Active' : 'مفعّل'}
+                      </span>
+                    ) : (
+                      <span className="bg-white/10 text-cream-200 text-[10px] px-2 py-0.5 rounded-full font-semibold">
+                        {language === 'en' ? 'Optional' : 'اختياري'}
+                      </span>
+                    )}
+                  </h4>
+                  <p className="text-xs text-cream-200 mt-0.5">
+                    {language === 'en'
+                      ? 'Automate your inventory! Sync products, prices, and stock hourly directly from your Google Sheet.'
+                      : 'أتمت قائمة منتجاتك! مزامنة تلقائية كل ساعة للمنتجات والأسعار والوفرة مباشرة من شيت جوجل.'}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setActiveTab('sheets')}
+                className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold transition-all shrink-0 shadow-sm"
+              >
+                {merchant.google_sheet_id
+                  ? (language === 'en' ? 'Manage Sheet Sync' : 'إدارة المزامنة')
+                  : (language === 'en' ? 'Connect Google Sheet' : 'ربط Google Sheets')}
+              </button>
+            </div>
+
             <div className="flex justify-between items-center">
               <h3 className="text-lg font-bold text-dark-950">
                 {language === 'en' ? 'Manage Products' : 'إدارة المنتجات'}
@@ -904,6 +1031,236 @@ export default function MerchantDashboardClient({
                 ))}
               </div>
             )}
+          </div>
+        )}
+
+        {/* Tab: Google Sheets Sync */}
+        {activeTab === 'sheets' && (
+          <div className="space-y-8 animate-fade-in">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-dark-100 pb-4">
+              <div>
+                <h3 className="text-lg font-bold text-dark-950 flex items-center gap-2">
+                  <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
+                  {language === 'en' ? 'Google Sheets Sync' : 'مزامنة Google Sheets'}
+                </h3>
+                <p className="text-xs text-dark-600 mt-1">
+                  {language === 'en'
+                    ? 'Connect your Google Sheet to automatically sync your products catalog every hour.'
+                    : 'اربط جدول بيانات Google Sheets لمزامنة قائمة منتجاتك وأسعارها تلقائياً كل ساعة.'}
+                </p>
+              </div>
+
+              {/* Status Badge & Actions */}
+              {merchant.sheet_sync_enabled && (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleManualSyncSheet}
+                    disabled={syncingSheet}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${syncingSheet ? 'animate-spin' : ''}`} />
+                    {syncingSheet 
+                      ? (language === 'en' ? 'Syncing...' : 'جاري المزامنة...') 
+                      : (language === 'en' ? 'Sync Now' : 'مزامنة الآن')}
+                  </button>
+                  <button
+                    onClick={handleDisconnectSheet}
+                    className="px-3 py-1.5 border border-red-200 text-red-600 hover:bg-red-50 rounded-xl text-xs font-bold transition-all"
+                  >
+                    {language === 'en' ? 'Disconnect' : 'إلغاء الربط'}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Sync Overview & Status Card */}
+            {merchant.sheet_sync_enabled && (
+              <div className="bg-cream-50/60 border border-dark-100 p-5 rounded-3xl grid sm:grid-cols-3 gap-4">
+                <div>
+                  <span className="text-[10px] font-bold text-dark-500 uppercase tracking-wider block">
+                    {language === 'en' ? 'Sync Status' : 'حالة المزامنة'}
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 mt-1 font-bold text-xs">
+                    {merchant.last_sync_status === 'success' ? (
+                      <span className="bg-emerald-100 text-emerald-700 px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                        <Check className="w-3 h-3" />
+                        {language === 'en' ? 'Success' : 'ناجحة'}
+                      </span>
+                    ) : merchant.last_sync_status === 'error' ? (
+                      <span className="bg-red-100 text-red-700 px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                        <AlertCircle className="w-3 h-3" />
+                        {language === 'en' ? 'Sync Error' : 'خطأ بالمزامنة'}
+                      </span>
+                    ) : (
+                      <span className="bg-amber-100 text-amber-700 px-2.5 py-0.5 rounded-full">
+                        {language === 'en' ? 'Pending First Sync' : 'في انتظار أول مزامنة'}
+                      </span>
+                    )}
+                  </span>
+                </div>
+
+                <div>
+                  <span className="text-[10px] font-bold text-dark-500 uppercase tracking-wider block">
+                    {language === 'en' ? 'Last Synced' : 'آخر مزامنة'}
+                  </span>
+                  <span className="text-xs font-semibold text-dark-900 mt-1 block">
+                    {merchant.last_synced_at 
+                      ? new Date(merchant.last_synced_at).toLocaleString(language === 'en' ? 'en-US' : 'ar-EG')
+                      : (language === 'en' ? 'Not synced yet' : 'لم تتم بعد')}
+                  </span>
+                </div>
+
+                <div>
+                  <span className="text-[10px] font-bold text-dark-500 uppercase tracking-wider block">
+                    {language === 'en' ? 'Sync Schedule' : 'جدول المزامنة'}
+                  </span>
+                  <span className="text-xs font-semibold text-dark-900 mt-1 block">
+                    {language === 'en' ? 'Automatic (Every Hour)' : 'تلقائي (كل ساعة)'}
+                  </span>
+                </div>
+
+                {merchant.last_sync_error && (
+                  <div className="sm:col-span-3 bg-red-50 border border-red-200 text-red-700 p-3 rounded-2xl text-xs flex items-start gap-2 mt-2">
+                    <AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-bold block">{language === 'en' ? 'Sync Warning / Error:' : 'تنبيه المزامنة:'}</span>
+                      <span>{merchant.last_sync_error}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Step 1: Connect Google Account */}
+            {!merchant.google_refresh_token ? (
+              <div className="bg-white border border-dark-100 p-6 rounded-3xl space-y-4 max-w-2xl">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold shrink-0">
+                    1
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-dark-950 text-sm">
+                      {language === 'en' ? 'Connect Google Account' : 'الخطوة الأولى: ربط حساب Google'}
+                    </h4>
+                    <p className="text-xs text-dark-600">
+                      {language === 'en'
+                        ? 'Authorize Rodlli to securely read your Google Sheets data.'
+                        : 'امنح المنصة صلاحية قراءة بيانات Google Sheets بأمان.'}
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleConnectGoogleSheets}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-dark-900 hover:bg-dark-800 text-white rounded-xl text-xs font-bold transition-all shadow-sm"
+                >
+                  <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+                  {language === 'en' ? 'Connect Google Sheets Account' : 'ربط حساب Google Sheets'}
+                </button>
+              </div>
+            ) : (
+              /* Step 2: Paste Sheet Link */
+              <div className="bg-white border border-dark-100 p-6 rounded-3xl space-y-6 max-w-2xl">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold shrink-0">
+                    2
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-dark-950 text-sm">
+                      {language === 'en' ? 'Link Google Sheet URL' : 'الخطوة الثانية: إلصاق رابط Google Sheet'}
+                    </h4>
+                    <p className="text-xs text-dark-600">
+                      {language === 'en'
+                        ? 'Paste the full shareable URL of your Google Sheet.'
+                        : 'الصق الرابط الكامل لصفحة الشيت الخاصة بمنتجاتك.'}
+                    </p>
+                  </div>
+                </div>
+
+                <form onSubmit={handleSaveSheetLink} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold text-dark-700 mb-1">
+                      {language === 'en' ? 'Google Sheet URL' : 'رابط صفحة جوجل شيت'}
+                    </label>
+                    <input
+                      type="url"
+                      required
+                      value={sheetInputUrl}
+                      onChange={(e) => setSheetInputUrl(e.target.value)}
+                      placeholder="https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit"
+                      className="w-full px-3 py-2.5 border border-dark-200 rounded-xl text-sm font-mono text-dark-900"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="submit"
+                      disabled={savingSheet}
+                      className="px-5 py-2.5 bg-primary-500 hover:bg-primary-600 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-2 disabled:opacity-50"
+                    >
+                      {savingSheet && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                      {language === 'en' ? 'Save & Start Sync' : 'حفظ وبدء المزامنة الفورية'}
+                    </button>
+
+                    {merchant.google_sheet_id && (
+                      <a
+                        href={`https://docs.google.com/spreadsheets/d/${merchant.google_sheet_id}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-xs font-bold text-primary-500 hover:underline flex items-center gap-1"
+                      >
+                        {language === 'en' ? 'Open Sheet' : 'فتح الشيت الحقيقي'}
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
+                    )}
+                  </div>
+                </form>
+              </div>
+            )}
+
+            {/* Template & Format Instructions */}
+            <div className="border border-dark-100 p-6 rounded-3xl bg-cream-50/50 space-y-4 max-w-2xl">
+              <h4 className="font-bold text-dark-950 text-sm flex items-center gap-2">
+                <FileSpreadsheet className="w-4 h-4 text-primary-500" />
+                {language === 'en' ? 'Required Sheet Column Format' : 'تنسيق ترتيب الأعمدة المطلوب في الشيت'}
+              </h4>
+
+              <p className="text-xs text-dark-600">
+                {language === 'en'
+                  ? 'Ensure your sheet follows the strict column order starting from row 2 (row 1 is reserved for headers):'
+                  : 'تأكد من ترتيب الأعمدة في الشيت من اليسار إلى اليمين بدءاً من الصف الثاني (الصف الأول للعناوين):'}
+              </p>
+
+              <div className="overflow-x-auto border border-dark-100 rounded-2xl bg-white text-xs">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-cream-100 text-dark-800 font-bold border-b border-dark-100">
+                      <th className="p-2.5">Col A</th>
+                      <th className="p-2.5">Col B</th>
+                      <th className="p-2.5">Col C</th>
+                      <th className="p-2.5">Col D</th>
+                      <th className="p-2.5">Col E</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-dark-50 text-dark-700">
+                    <tr>
+                      <td className="p-2.5 font-semibold">اسم المنتج</td>
+                      <td className="p-2.5 font-semibold">السعر (رقم)</td>
+                      <td className="p-2.5">الوصف</td>
+                      <td className="p-2.5">متوفر (نعم/لا)</td>
+                      <td className="p-2.5">رابط صورة (URL)</td>
+                    </tr>
+                    <tr className="bg-cream-50/30 text-dark-500">
+                      <td className="p-2.5">قهوة لاتيه</td>
+                      <td className="p-2.5">45.00</td>
+                      <td className="p-2.5">لاتيه ساخن مع حليب طازج</td>
+                      <td className="p-2.5">نعم</td>
+                      <td className="p-2.5">https://.../img.jpg</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         )}
 

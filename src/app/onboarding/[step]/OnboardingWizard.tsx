@@ -3,10 +3,10 @@
 import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslation } from '@/components/layout/I18nProvider'
-import { upsertMerchant, updateOnboardingStep, addProduct, deleteProduct, addFAQ, deleteFAQ } from '@/app/actions/merchant'
+import { upsertMerchant, updateOnboardingStep, addProduct, deleteProduct, addFAQ, deleteFAQ, saveMerchantSheetLink } from '@/app/actions/merchant'
 import { 
   Store, Tag, FileText, MapPin, Phone, Globe, AlertCircle, Check, 
-  ArrowLeft, ArrowRight, ShoppingBag, HelpCircle, Plus, Trash2, Copy, ExternalLink, Sparkles 
+  ArrowLeft, ArrowRight, ShoppingBag, HelpCircle, Plus, Trash2, Copy, ExternalLink, Sparkles, FileSpreadsheet 
 } from 'lucide-react'
 
 interface OnboardingWizardProps {
@@ -96,6 +96,25 @@ export default function OnboardingWizard({
   const [pDescription, setPDescription] = useState('')
   const [pImageUrl, setPImageUrl] = useState('')
   const [productsList, setProductsList] = useState(initialProducts)
+  const [productAddMethod, setProductAddMethod] = useState<'manual' | 'sheets'>(merchant.google_sheet_id ? 'sheets' : 'manual')
+  const [onboardingSheetUrl, setOnboardingSheetUrl] = useState(merchant.google_sheet_id ? `https://docs.google.com/spreadsheets/d/${merchant.google_sheet_id}` : '')
+  const [savingOnboardingSheet, setSavingOnboardingSheet] = useState(false)
+
+  const handleSaveOnboardingSheet = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!onboardingSheetUrl.trim()) return
+    setSavingOnboardingSheet(true)
+    setError(null)
+    const res = await saveMerchantSheetLink(merchant.id, onboardingSheetUrl)
+    setSavingOnboardingSheet(false)
+    if (res.error) {
+      setError(res.error)
+    } else {
+      setSuccess(language === 'en' ? `Sheet linked! Synced ${res.count || 0} products.` : `تم ربط الشيت ومزامنة ${res.count || 0} منتجات بنجاح!`)
+      setTimeout(() => setSuccess(null), 4000)
+      router.refresh()
+    }
+  }
 
   // Step 3: First FAQ State
   const [faqAnswerInput, setFaqAnswerInput] = useState<Record<string, string>>({})
@@ -537,8 +556,90 @@ export default function OnboardingWizard({
           </p>
         </div>
 
-        {/* Product Add Form */}
-        <form onSubmit={handleAddProduct} className="bg-cream-100/50 p-5 border border-dark-100 rounded-2xl space-y-4">
+        {/* Method Switcher */}
+        <div className="flex bg-cream-100 p-1 rounded-xl gap-1 mb-4 text-xs font-bold">
+          <button
+            type="button"
+            onClick={() => setProductAddMethod('manual')}
+            className={`flex-1 py-2 rounded-lg flex items-center justify-center gap-1.5 transition-all ${
+              productAddMethod === 'manual' ? 'bg-white text-dark-950 shadow-xs' : 'text-dark-600 hover:text-dark-900'
+            }`}
+          >
+            <Plus className="w-3.5 h-3.5 text-primary-500" />
+            {language === 'en' ? 'Add Manually' : 'أضف منتج يدويًا'}
+          </button>
+          <button
+            type="button"
+            onClick={() => setProductAddMethod('sheets')}
+            className={`flex-1 py-2 rounded-lg flex items-center justify-center gap-1.5 transition-all ${
+              productAddMethod === 'sheets' ? 'bg-white text-emerald-700 shadow-xs' : 'text-dark-600 hover:text-dark-900'
+            }`}
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+            {language === 'en' ? 'Sync Google Sheets' : 'ربط Google Sheets'}
+          </button>
+        </div>
+
+        {/* Option 2: Google Sheets Sync */}
+        {productAddMethod === 'sheets' ? (
+          <div className="bg-emerald-50/40 p-5 border border-emerald-100 rounded-2xl space-y-4">
+            <div className="flex items-center gap-2">
+              <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
+              <h4 className="font-bold text-xs text-dark-900 uppercase tracking-wider">
+                {language === 'en' ? 'Google Sheets Sync Setup' : 'إعداد مزامنة Google Sheets'}
+              </h4>
+            </div>
+
+            {!merchant.google_refresh_token ? (
+              <div className="space-y-3">
+                <p className="text-xs text-dark-600">
+                  {language === 'en'
+                    ? 'Connect your Google account to grant read permissions for your inventory sheet.'
+                    : 'اربط حساب Google الخاص بك لمنح تصريح قراءة شيت المنتجات.'}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => window.location.href = '/api/auth/google-sheets/connect?redirect_to=onboarding'}
+                  className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-dark-900 hover:bg-dark-800 text-white rounded-xl text-xs font-bold shadow-sm transition-all"
+                >
+                  <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+                  {language === 'en' ? 'Connect Google Account' : 'ربط حساب Google'}
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleSaveOnboardingSheet} className="space-y-3">
+                <div className="bg-emerald-100/50 text-emerald-800 p-2.5 rounded-xl text-xs flex items-center gap-2 font-semibold">
+                  <Check className="w-4 h-4 text-emerald-600" />
+                  {language === 'en' ? 'Google Account Connected!' : 'تم ربط حساب Google بنجاح!'}
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-dark-700 mb-1">
+                    {language === 'en' ? 'Paste Google Sheet URL' : 'الصق رابط صفحة Google Sheet'}
+                  </label>
+                  <input
+                    type="url"
+                    required
+                    value={onboardingSheetUrl}
+                    onChange={(e) => setOnboardingSheetUrl(e.target.value)}
+                    placeholder="https://docs.google.com/spreadsheets/d/..."
+                    className="w-full px-3 py-2.5 border border-dark-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={savingOnboardingSheet}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm disabled:opacity-50"
+                >
+                  {language === 'en' ? 'Save & Fetch Products Now' : 'حفظ ومزامنة المنتجات الآن'}
+                </button>
+              </form>
+            )}
+          </div>
+        ) : (
+          /* Option 1: Product Add Form */
+          <form onSubmit={handleAddProduct} className="bg-cream-100/50 p-5 border border-dark-100 rounded-2xl space-y-4">
           <div className="text-xs font-bold text-primary-600 uppercase tracking-wider mb-1">
             {language === 'en' ? 'Product Information' : 'بيانات المنتج'}
           </div>
@@ -608,6 +709,7 @@ export default function OnboardingWizard({
             {language === 'en' ? '+ Add this product' : '+ أضف هذا المنتج'}
           </button>
         </form>
+        )}
 
         {/* Added Products Section */}
         <div className="space-y-3">
