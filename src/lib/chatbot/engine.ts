@@ -1,6 +1,9 @@
 import { db } from '@/lib/db'
 import { sql } from 'drizzle-orm'
-import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai'
+import { generateText, tool, stepCountIs, zodSchema } from 'ai'
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
+import { createGoogleGenerativeAI } from '@ai-sdk/google'
+import { z } from 'zod'
 import { searchProducts, getProductDetails, getFAQAnswer, checkWorkingHours, checkOrderStatus } from './tools'
 
 interface QuickReply {
@@ -191,82 +194,74 @@ export class ChatbotEngine {
     return localResult
   }
 
-  // 1. Google Gemini AI Engine with Function Calling and Memory
+  private getVercelAITools(conversationId?: string | null) {
+    return {
+      searchProducts: tool({
+        description: 'Search products in the merchant catalog matching a search query keyword.',
+        inputSchema: zodSchema(z.object({
+          query: z.string().describe('Search term/keyword'),
+        })),
+        execute: async ({ query }: { query: string }) => {
+          const res = await searchProducts(query, this.merchantId)
+          const firstProdId = res && res.length > 0 ? res[0].id : null
+          await this.logToolCall('searchProducts', { query }, conversationId, firstProdId)
+          return res
+        }
+      }),
+      getProductDetails: tool({
+        description: 'Get complete attributes and pricing for a single product UUID.',
+        inputSchema: zodSchema(z.object({
+          productId: z.string().describe('The product UUID')
+        })),
+        execute: async ({ productId }: { productId: string }) => {
+          const res = await getProductDetails(productId)
+          await this.logToolCall('getProductDetails', { productId }, conversationId, productId)
+          return res
+        }
+      }),
+      getFAQAnswer: tool({
+        description: 'Scan merchant FAQs for queries matching delivery options, policies, or questions.',
+        inputSchema: zodSchema(z.object({
+          topic: z.string().describe('Question/topic keyword')
+        })),
+        execute: async ({ topic }: { topic: string }) => {
+          const res = await getFAQAnswer(topic, this.merchantId)
+          await this.logToolCall('getFAQAnswer', { topic }, conversationId, null)
+          return res
+        }
+      }),
+      checkWorkingHours: tool({
+        description: 'Check store opening hours, closure dates and schedules.',
+        inputSchema: zodSchema(z.object({})),
+        execute: async () => {
+          const res = await checkWorkingHours(this.merchantId)
+          await this.logToolCall('checkWorkingHours', {}, conversationId, null)
+          return res
+        }
+      }),
+      checkOrderStatus: tool({
+        description: 'Check status, delivery estimate, and notes for a customer order by order ID.',
+        inputSchema: zodSchema(z.object({
+          orderId: z.string().describe('The order ID string e.g. RD-1032 or 1032')
+        })),
+        execute: async ({ orderId }: { orderId: string }) => {
+          const res = await checkOrderStatus(orderId, this.merchantId)
+          await this.logToolCall('checkOrderStatus', { orderId }, conversationId, null)
+          return res
+        }
+      })
+    }
+  }
+
+  // 1. Google Gemini AI Engine with Vercel AI SDK
   private async processMessageWithGemini(
     userMessage: string,
     language: 'en' | 'ar',
     apiKey: string,
     conversationId?: string | null
   ): Promise<ChatbotResponse> {
-    const genAI = new GoogleGenerativeAI(apiKey)
+    const google = createGoogleGenerativeAI({ apiKey })
     const businessName = await this.getMerchantName()
-
-    // Setup Tools
-    const tools = [
-      {
-        functionDeclarations: [
-          {
-            name: 'searchProducts',
-            description: 'Search products in the merchant catalog matching a search query.',
-            parameters: {
-              type: SchemaType.OBJECT,
-              properties: {
-                query: { type: SchemaType.STRING, description: 'Search term/keyword' },
-                merchantId: { type: SchemaType.STRING, description: 'The merchant database UUID' }
-              },
-              required: ['query', 'merchantId']
-            }
-          },
-          {
-            name: 'getProductDetails',
-            description: 'Get complete attributes and pricing for a single product UUID.',
-            parameters: {
-              type: SchemaType.OBJECT,
-              properties: {
-                productId: { type: SchemaType.STRING, description: 'The product UUID' }
-              },
-              required: ['productId']
-            }
-          },
-          {
-            name: 'getFAQAnswer',
-            description: 'Scan merchant FAQs for queries matching delivery options, policies, or questions.',
-            parameters: {
-              type: SchemaType.OBJECT,
-              properties: {
-                topic: { type: SchemaType.STRING, description: 'Question/topic keyword' },
-                merchantId: { type: SchemaType.STRING, description: 'The merchant database UUID' }
-              },
-              required: ['topic', 'merchantId']
-            }
-          },
-          {
-            name: 'checkWorkingHours',
-            description: 'Check store opening hours, closure dates and schedules.',
-            parameters: {
-              type: SchemaType.OBJECT,
-              properties: {
-                merchantId: { type: SchemaType.STRING, description: 'The merchant database UUID' }
-              },
-              required: ['merchantId']
-            }
-          },
-          {
-            name: 'checkOrderStatus',
-            description: 'Check status, delivery estimate, and notes for a customer order by order ID.',
-            parameters: {
-              type: SchemaType.OBJECT,
-              properties: {
-                orderId: { type: SchemaType.STRING, description: 'The order ID string e.g. RD-1032 or 1032' },
-                merchantId: { type: SchemaType.STRING, description: 'The merchant database UUID' }
-              },
-              required: ['orderId', 'merchantId']
-            }
-          }
-        ]
-      }
-    ]
-
     const systemInstruction = `
       You are an expert sales assistant for the store "${businessName}" (ID: ${this.merchantId}).
       You must ONLY answer based on data retrieved from the tools. Do NOT hallucinate prices or details.
@@ -282,71 +277,38 @@ export class ChatbotEngine {
       4. Respond concisely (maximum 2-3 sentences) in the same language as the user query.
     `
 
-    const model = genAI.getGenerativeModel({
-      model: 'gemini-1.5-flash',
-      systemInstruction,
-      tools: tools as any,
-      generationConfig: {
-        responseMimeType: 'application/json',
-      }
-    })
+    const messages: Array<{ role: 'user' | 'assistant'; content: string }> = []
 
-    // Retrieve conversation history
-    const history: any[] = []
     if (conversationId) {
-      const messagesDb = await this.getConversationHistory(conversationId)
-      for (const m of messagesDb) {
-        history.push({
-          role: m.sender_type === 'bot' ? 'model' : 'user',
-          parts: [{ text: m.content }]
+      const history = await this.getConversationHistory(conversationId)
+      for (const m of history) {
+        messages.push({
+          role: m.sender_type === 'bot' ? 'assistant' : 'user',
+          content: m.content
         })
       }
     }
 
-    const chat = model.startChat({ history })
-    let response = await chat.sendMessage(userMessage)
-    let functionCalls = response.response.functionCalls()
+    messages.push({ role: 'user', content: userMessage })
 
-    // Loop to handle potential multiple function calls
-    let iterations = 0
-    while (functionCalls && functionCalls.length > 0 && iterations < 3) {
-      iterations++
-      const call = functionCalls[0]
-      const args = (call.args || {}) as any
-      let resultData: any = null
+    const result = await generateText({
+      model: google('gemini-1.5-flash'),
+      system: systemInstruction,
+      messages,
+      tools: this.getVercelAITools(conversationId),
+      stopWhen: stepCountIs(3),
+    })
 
-      if (call.name === 'searchProducts') {
-        resultData = await searchProducts(args.query as string, args.merchantId as string || this.merchantId)
-        const firstProdId = resultData && resultData.length > 0 ? resultData[0].id : null
-        await this.logToolCall('searchProducts', { query: args.query }, conversationId, firstProdId)
-      } else if (call.name === 'getProductDetails') {
-        resultData = await getProductDetails(args.productId as string)
-        await this.logToolCall('getProductDetails', { productId: args.productId }, conversationId, args.productId as string)
-      } else if (call.name === 'getFAQAnswer') {
-        resultData = await getFAQAnswer(args.topic as string, args.merchantId as string || this.merchantId)
-        await this.logToolCall('getFAQAnswer', { topic: args.topic }, conversationId, null)
-      } else if (call.name === 'checkWorkingHours') {
-        resultData = await checkWorkingHours(args.merchantId as string || this.merchantId)
-        await this.logToolCall('checkWorkingHours', {}, conversationId, null)
-      } else if (call.name === 'checkOrderStatus') {
-        resultData = await checkOrderStatus(args.orderId as string, args.merchantId as string || this.merchantId)
-        await this.logToolCall('checkOrderStatus', { orderId: args.orderId }, conversationId, null)
+    const rawText = result.text.trim()
+    let parsed: any = { reply: rawText, confident: true }
+    try {
+      const jsonMatch = rawText.match(/\{[\s\S]*\}/)
+      if (jsonMatch) {
+        parsed = JSON.parse(jsonMatch[0])
       }
-
-      response = await chat.sendMessage([
-        {
-          functionResponse: {
-            name: call.name,
-            response: { result: resultData }
-          }
-        }
-      ])
-      functionCalls = response.response.functionCalls()
+    } catch {
+      parsed = { reply: rawText, confident: true }
     }
-
-    // Parse structured JSON response
-    const rawText = response.response.text()
-    const parsed = JSON.parse(rawText)
 
     if (parsed.confident === false) {
       await this.logUnansweredQuestion(userMessage, conversationId)
@@ -360,7 +322,7 @@ export class ChatbotEngine {
     }
 
     return {
-      text: parsed.reply,
+      text: parsed.reply || rawText,
       type: 'text',
       confident: true,
       quickReplies: [
@@ -370,100 +332,21 @@ export class ChatbotEngine {
     }
   }
 
-  // 1.5. Zhipu AI (GLM) Engine with Function Calling and Memory
+  // 1.5. Zhipu AI (GLM) Engine with Vercel AI SDK (OpenAI Compatible)
   private async processMessageWithZhipu(
     userMessage: string,
     language: 'en' | 'ar',
     apiKey: string,
     conversationId?: string | null
   ): Promise<ChatbotResponse> {
-    const OpenAI = (await import('openai')).default
     const zhipuModel = process.env.ZHIPU_MODEL || 'glm-4.7-flash'
-
-    const openai = new OpenAI({
-      apiKey: apiKey,
+    const zhipu = createOpenAICompatible({
+      name: 'zhipu',
+      apiKey,
       baseURL: 'https://open.bigmodel.cn/api/paas/v4'
     })
 
     const businessName = await this.getMerchantName()
-
-    // Setup Tools
-    const tools: any[] = [
-      {
-        type: 'function',
-        function: {
-          name: 'searchProducts',
-          description: 'Search products in the merchant catalog matching a search query keyword.',
-          parameters: {
-            type: 'object',
-            properties: {
-              query: { type: 'string', description: 'Search term/keyword' },
-              merchantId: { type: 'string', description: 'The merchant database UUID' }
-            },
-            required: ['query', 'merchantId']
-          }
-        }
-      },
-      {
-        type: 'function',
-        function: {
-          name: 'getProductDetails',
-          description: 'Get complete attributes and pricing for a single product UUID.',
-          parameters: {
-            type: 'object',
-            properties: {
-              productId: { type: 'string', description: 'The product UUID' }
-            },
-            required: ['productId']
-          }
-        }
-      },
-      {
-        type: 'function',
-        function: {
-          name: 'getFAQAnswer',
-          description: 'Scan merchant FAQs for queries matching delivery options, policies, or questions.',
-          parameters: {
-            type: 'object',
-            properties: {
-              topic: { type: 'string', description: 'Question/topic keyword' },
-              merchantId: { type: 'string', description: 'The merchant database UUID' }
-            },
-            required: ['topic', 'merchantId']
-          }
-        }
-      },
-      {
-        type: 'function',
-        function: {
-          name: 'checkWorkingHours',
-          description: 'Check store opening hours, closure dates and schedules.',
-          parameters: {
-            type: 'object',
-            properties: {
-              merchantId: { type: 'string', description: 'The merchant database UUID' }
-            },
-            required: ['merchantId']
-          }
-        }
-      },
-      {
-        type: 'function',
-        function: {
-          name: 'checkOrderStatus',
-          description: 'Check status, delivery estimate, and notes for a customer order by order ID.',
-          parameters: {
-            type: 'object',
-            properties: {
-              orderId: { type: 'string', description: 'The order ID string e.g. RD-1032 or 1032' },
-              merchantId: { type: 'string', description: 'The merchant database UUID' }
-            },
-            required: ['orderId', 'merchantId']
-          }
-        }
-      }
-    ]
-
     const systemInstruction = `
       You are an expert sales assistant for the store "${businessName}" (ID: ${this.merchantId}).
       You must ONLY answer based on data retrieved from the tools. Do NOT hallucinate prices or details.
@@ -479,15 +362,11 @@ export class ChatbotEngine {
       4. Respond concisely (maximum 2-3 sentences) in the same language as the user query.
     `
 
-    // Build message thread
-    const messages: any[] = [
-      { role: 'system', content: systemInstruction }
-    ]
+    const messages: Array<{ role: 'user' | 'assistant'; content: string }> = []
 
-    // Load memory context
     if (conversationId) {
-      const messagesDb = await this.getConversationHistory(conversationId)
-      for (const m of messagesDb) {
+      const history = await this.getConversationHistory(conversationId)
+      for (const m of history) {
         messages.push({
           role: m.sender_type === 'bot' ? 'assistant' : 'user',
           content: m.content
@@ -495,69 +374,26 @@ export class ChatbotEngine {
       }
     }
 
-    // Add new user query
     messages.push({ role: 'user', content: userMessage })
 
-    // Call Zhipu AI Chat completions endpoint
-    let response = await openai.chat.completions.create({
-      model: zhipuModel,
+    const result = await generateText({
+      model: zhipu(zhipuModel),
+      system: systemInstruction,
       messages,
-      tools,
-      tool_choice: 'auto',
-      response_format: { type: 'json_object' }
+      tools: this.getVercelAITools(conversationId),
+      stopWhen: stepCountIs(3),
     })
 
-    let responseMessage = response.choices[0].message
-    let toolCalls = responseMessage.tool_calls
-
-    let iterations = 0
-    while (toolCalls && toolCalls.length > 0 && iterations < 3) {
-      iterations++
-      messages.push(responseMessage)
-
-      for (const toolCall of toolCalls) {
-        const tc = toolCall as any
-        const callName = tc.function.name
-        const callArgs = JSON.parse(tc.function.arguments || '{}')
-        let resultData: any = null
-
-        if (callName === 'searchProducts') {
-          resultData = await searchProducts(callArgs.query, callArgs.merchantId || this.merchantId)
-          const firstProdId = resultData && resultData.length > 0 ? resultData[0].id : null
-          await this.logToolCall('searchProducts', { query: callArgs.query }, conversationId, firstProdId)
-        } else if (callName === 'getProductDetails') {
-          resultData = await getProductDetails(callArgs.productId)
-          await this.logToolCall('getProductDetails', { productId: callArgs.productId }, conversationId, callArgs.productId)
-        } else if (callName === 'getFAQAnswer') {
-          resultData = await getFAQAnswer(callArgs.topic, callArgs.merchantId || this.merchantId)
-          await this.logToolCall('getFAQAnswer', { topic: callArgs.topic }, conversationId, null)
-        } else if (callName === 'checkWorkingHours') {
-          resultData = await checkWorkingHours(callArgs.merchantId || this.merchantId)
-          await this.logToolCall('checkWorkingHours', {}, conversationId, null)
-        } else if (callName === 'checkOrderStatus') {
-          resultData = await checkOrderStatus(callArgs.orderId, callArgs.merchantId || this.merchantId)
-          await this.logToolCall('checkOrderStatus', { orderId: callArgs.orderId }, conversationId, null)
-        }
-
-        messages.push({
-          role: 'tool',
-          tool_call_id: tc.id,
-          name: callName,
-          content: JSON.stringify({ result: resultData })
-        })
+    const rawText = result.text.trim()
+    let parsed: any = { reply: rawText, confident: true }
+    try {
+      const jsonMatch = rawText.match(/\{[\s\S]*\}/)
+      if (jsonMatch) {
+        parsed = JSON.parse(jsonMatch[0])
       }
-
-      response = await openai.chat.completions.create({
-        model: zhipuModel,
-        messages,
-        response_format: { type: 'json_object' }
-      })
-      responseMessage = response.choices[0].message
-      toolCalls = responseMessage.tool_calls
+    } catch {
+      parsed = { reply: rawText, confident: true }
     }
-
-    const rawText = responseMessage.content || '{}'
-    const parsed = JSON.parse(rawText)
 
     if (parsed.confident === false) {
       await this.logUnansweredQuestion(userMessage, conversationId)
@@ -571,7 +407,7 @@ export class ChatbotEngine {
     }
 
     return {
-      text: parsed.reply,
+      text: parsed.reply || rawText,
       type: 'text',
       confident: true,
       quickReplies: [
