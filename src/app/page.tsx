@@ -36,11 +36,8 @@ export default function Home() {
             <a href="#features" className="hover:text-primary-500 transition-colors">
               {language === 'en' ? 'Features' : 'المميزات'}
             </a>
-            <a href="#pricing" className="hover:text-primary-500 transition-colors">
-              {t('nav.pricing')}
-            </a>
-            <a href="#contact" className="hover:text-primary-500 transition-colors">
-              {t('nav.contact')}
+            <a href="mailto:rodlliteam@gmail.com" className="hover:text-primary-500 transition-colors">
+              {t('nav.contact')} (rodlliteam@gmail.com)
             </a>
           </nav>
 
@@ -327,7 +324,10 @@ export default function Home() {
             © {new Date().getFullYear()} Rodlli. All rights reserved.
           </p>
 
-          <div className="flex gap-6">
+          <div className="flex flex-wrap items-center gap-6">
+            <a href="mailto:rodlliteam@gmail.com" className="text-primary-400 hover:text-white font-semibold transition-colors">
+              rodlliteam@gmail.com
+            </a>
             <a href="#" className="hover:text-white transition-colors">Privacy Policy</a>
             <a href="#" className="hover:text-white transition-colors">Terms of Service</a>
           </div>
