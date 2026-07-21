@@ -3,12 +3,13 @@
 import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslation } from '@/components/layout/I18nProvider'
-import { upsertMerchant, addProduct, deleteProduct, deleteProductsBulk, deleteAllMerchantProducts, addFAQ, deleteFAQ, updateWorkingHours, resolveUnansweredQuestion, saveMerchantSheetLink, triggerManualSheetSync, disconnectMerchantSheet, saveMerchantOrdersSheetLink, triggerManualOrdersSync, disconnectMerchantOrdersSheet, getMerchantOrders } from '@/app/actions/merchant'
+import { upsertMerchant, addProduct, deleteProduct, deleteProductsBulk, deleteAllMerchantProducts, addFAQ, deleteFAQ, updateWorkingHours, resolveUnansweredQuestion, saveMerchantSheetLink, triggerManualSheetSync, disconnectMerchantSheet, saveMerchantOrdersSheetLink, triggerManualOrdersSync, disconnectMerchantOrdersSheet, getMerchantOrders, updateMerchantWidgetColor } from '@/app/actions/merchant'
 import { getAnalyticsTrend } from '@/app/actions/analytics'
+import { getContrastTextColor } from '@/lib/colors'
 import { 
   Store, ShoppingBag, HelpCircle, Clock, Link2, Copy, ExternalLink, 
   Trash2, Plus, Edit2, Check, AlertCircle, RefreshCw, MessageSquareWarning,
-  BarChart3, TrendingUp, MessageSquare, Percent, FileSpreadsheet, PackageCheck, Truck
+  BarChart3, TrendingUp, MessageSquare, Percent, FileSpreadsheet, PackageCheck, Truck, Palette, RotateCcw
 } from 'lucide-react'
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts'
 
@@ -488,6 +489,29 @@ export default function MerchantDashboardClient({
       )
       router.refresh()
     }
+  }
+
+  // 6. Widget Color Customization State & Handlers
+  const [widgetPrimaryColor, setWidgetPrimaryColor] = useState(merchant.widget_primary_color || '#F26B1D')
+  const [savingWidgetColor, setSavingWidgetColor] = useState(false)
+
+  const handleSaveWidgetColor = async () => {
+    setSavingWidgetColor(true)
+    const res = await updateMerchantWidgetColor(merchant.id, widgetPrimaryColor)
+    setSavingWidgetColor(false)
+    if (res.error) {
+      showMessage(null, res.error)
+    } else {
+      showMessage(
+        language === 'en' ? 'Widget color saved successfully!' : 'تم حفظ لون الـ Widget بنجاح!',
+        null
+      )
+      router.refresh()
+    }
+  }
+
+  const handleResetWidgetColor = () => {
+    setWidgetPrimaryColor('#F26B1D')
   }
 
   return (
@@ -1981,6 +2005,99 @@ export default function MerchantDashboardClient({
                   <Copy className="w-3.5 h-3.5" />
                   {language === 'en' ? 'Copy Code' : 'نسخ الكود'}
                 </button>
+              </div>
+            </div>
+
+            {/* Widget Color Customization Section */}
+            <div className="pt-6 border-t border-dark-100 space-y-4">
+              <div>
+                <h3 className="text-md font-bold text-dark-950 flex items-center gap-2">
+                  <Palette className="w-4 h-4 text-primary-500" />
+                  {language === 'en' ? 'Widget Color Customization' : 'تخصيص ألوان الشات بوت'}
+                </h3>
+                <p className="text-sm text-dark-600 max-w-xl mt-1">
+                  {language === 'en'
+                    ? 'Customize the primary color of the floating chat bubble and user message bubbles to match your brand identity.'
+                    : 'خصص اللون الرئيسي للفقاعة العائمة ورسائل العميل ليتطابق مع هوية متجرك البصرية.'}
+                </p>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-6 items-start max-w-2xl bg-cream-50 border border-dark-100 p-5 rounded-2xl">
+                {/* Color Inputs */}
+                <div className="space-y-4">
+                  <label className="block text-xs font-bold text-dark-900">
+                    {language === 'en' ? 'Primary Theme Color' : 'اللون الرئيسي'}
+                  </label>
+                  
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="color"
+                      value={widgetPrimaryColor}
+                      onChange={(e) => setWidgetPrimaryColor(e.target.value)}
+                      className="w-10 h-10 rounded-xl cursor-pointer border border-dark-200 p-0.5 bg-white shrink-0 shadow-sm"
+                    />
+                    <input
+                      type="text"
+                      value={widgetPrimaryColor}
+                      onChange={(e) => setWidgetPrimaryColor(e.target.value)}
+                      className="w-32 px-3 py-2 border border-dark-200 rounded-xl text-xs font-mono uppercase bg-white text-dark-900 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={handleSaveWidgetColor}
+                      disabled={savingWidgetColor}
+                      className="px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white text-xs font-bold rounded-xl transition-colors disabled:opacity-50 shadow-sm"
+                    >
+                      {savingWidgetColor 
+                        ? (language === 'en' ? 'Saving...' : 'جاري الحفظ...') 
+                        : (language === 'en' ? 'Save Color' : 'حفظ اللون')}
+                    </button>
+                    
+                    <button
+                      type="button"
+                      onClick={handleResetWidgetColor}
+                      className="flex items-center gap-1 px-3 py-2 border border-dark-200 hover:bg-white text-dark-700 text-xs font-semibold rounded-xl transition-colors"
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      {language === 'en' ? 'Reset Default' : 'إعادة للافتراضي'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Live Preview Box */}
+                <div className="space-y-2 bg-white border border-dark-100 p-4 rounded-xl shadow-sm">
+                  <span className="text-[10px] font-bold uppercase text-dark-400 block tracking-wider">
+                    {language === 'en' ? 'Live Preview' : 'المعاينة الحية'}
+                  </span>
+                  
+                  <div className="space-y-3 pt-1">
+                    {/* Simulated Floating Bubble */}
+                    <div className="flex items-center gap-2">
+                      <div 
+                        className="w-9 h-9 rounded-full flex items-center justify-center shadow-md transition-colors"
+                        style={{ backgroundColor: widgetPrimaryColor, color: getContrastTextColor(widgetPrimaryColor) }}
+                      >
+                        <MessageSquare className="w-4 h-4" />
+                      </div>
+                      <span className="text-[11px] font-semibold text-dark-700">
+                        {language === 'en' ? 'Floating Launcher' : 'زر الفقاعة العائمة'}
+                      </span>
+                    </div>
+
+                    {/* Simulated User Message Bubble */}
+                    <div className="text-right">
+                      <div 
+                        className="inline-block p-2.5 rounded-xl text-xs max-w-[80%] text-left rounded-tr-none shadow-sm transition-colors"
+                        style={{ backgroundColor: widgetPrimaryColor, color: getContrastTextColor(widgetPrimaryColor) }}
+                      >
+                        {language === 'en' ? 'Hello! How can I order?' : 'أهلاً! كيف يمكنني الطلب؟'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

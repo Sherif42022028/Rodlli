@@ -401,3 +401,20 @@ export async function getMerchantOrders(merchantId: string) {
   }
 }
 
+export async function updateMerchantWidgetColor(merchantId: string, color: string) {
+  try {
+    const cleanColor = color && color.trim() ? color.trim() : '#F26B1D'
+    await db.execute(
+      sql`UPDATE merchants 
+          SET widget_primary_color = ${cleanColor}, 
+              updated_at = NOW() 
+          WHERE id = ${merchantId}`
+    )
+    return { success: true, color: cleanColor }
+  } catch (error: any) {
+    console.error('updateMerchantWidgetColor error:', error)
+    return { error: error.message || 'فشل حفظ لون الـ Widget' }
+  }
+}
+
+

@@ -5,6 +5,7 @@ import { useTranslation } from '@/components/layout/I18nProvider'
 import { queryChatbot } from '@/app/actions/chatbot'
 import { getOrCreateConversation, getChatHistory, saveChatMessage, createContactRequest } from '@/app/actions/buyer'
 import { Bot, Send, Globe, X, ExternalLink } from 'lucide-react'
+import { getContrastTextColor } from '@/lib/colors'
 
 interface Message {
   id: string
@@ -30,6 +31,9 @@ export default function WidgetChatRoomClient({
   buyerId: string | null
 }) {
   const { language, changeLanguage, t } = useTranslation()
+
+  const primaryColor = merchant.widget_primary_color || '#F26B1D'
+  const textColor = merchant.widget_bubble_text_color || getContrastTextColor(primaryColor)
 
   // Chat State
   const [messages, setMessages] = useState<Message[]>([])
@@ -143,7 +147,10 @@ export default function WidgetChatRoomClient({
   }
 
   return (
-    <div className="h-screen w-screen flex flex-col bg-cream-50/30 overflow-hidden font-sans">
+    <div 
+      className="h-screen w-screen flex flex-col bg-cream-50/30 overflow-hidden font-sans"
+      style={{ '--widget-primary': primaryColor, '--widget-text': textColor } as React.CSSProperties}
+    >
       {/* Widget Header */}
       <header className="h-14 bg-white border-b border-dark-100 flex items-center justify-between px-4 shrink-0 shadow-sm">
         <div className="flex items-center gap-2.5">
@@ -194,7 +201,7 @@ export default function WidgetChatRoomClient({
           >
             {/* Avatar */}
             <div className={`w-6 h-6 rounded-md overflow-hidden flex items-center justify-center shrink-0 shadow-sm ${
-              m.sender === 'user' ? 'bg-dark-900 text-white' : 'bg-primary-500 text-white'
+              m.sender === 'user' ? 'bg-[var(--widget-primary)] text-[var(--widget-text)]' : 'bg-primary-500 text-white'
             }`}>
               {m.sender === 'user' ? (
                 <span className="text-[8px] font-bold">ME</span>
@@ -209,7 +216,7 @@ export default function WidgetChatRoomClient({
             <div className="space-y-1.5 max-w-full">
               <div className={`p-3 rounded-xl w-fit max-w-full ${
                 m.sender === 'user' 
-                  ? 'bg-dark-900 text-white rounded-tr-none' 
+                  ? 'bg-[var(--widget-primary)] text-[var(--widget-text)] rounded-tr-none shadow-sm' 
                   : 'bg-white border border-dark-100 text-dark-950 rounded-tl-none shadow-sm'
               }`}>
                 <p className="leading-relaxed break-words whitespace-pre-line text-xs">{m.text}</p>
@@ -313,12 +320,19 @@ export default function WidgetChatRoomClient({
           <button
             type="submit"
             disabled={!inputText.trim() || loading}
-            className="w-7 h-7 rounded-lg bg-primary-500 hover:bg-primary-600 disabled:bg-dark-100 disabled:text-dark-400 flex items-center justify-center text-white transition-colors"
+            className="w-7 h-7 rounded-lg bg-[var(--widget-primary)] text-[var(--widget-text)] hover:opacity-90 disabled:bg-dark-100 disabled:text-dark-400 flex items-center justify-center transition-colors"
           >
             <Send className="w-3.5 h-3.5" />
           </button>
         </form>
       </footer>
+
+      {/* Powered by Rodlli Footer */}
+      {merchant.show_powered_by !== false && (
+        <div className="text-[10px] text-center py-1.5 bg-white border-t border-dark-100 text-dark-400 font-semibold shrink-0">
+          Powered by <span className="font-extrabold text-primary-500">Rodlli</span>
+        </div>
+      )}
     </div>
   )
 }

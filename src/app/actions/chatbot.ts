@@ -7,7 +7,7 @@ import { sql } from 'drizzle-orm'
 export async function getMerchantBySlug(slug: string) {
   try {
     const result = await db.execute(
-      sql`SELECT id, profile_id, business_name, business_category, short_description, store_address, business_phone, website_url, slug, chatbot_link, bot_avatar_url FROM merchants WHERE slug = ${slug}`
+      sql`SELECT id, profile_id, business_name, business_category, short_description, store_address, business_phone, website_url, slug, chatbot_link, bot_avatar_url, widget_primary_color, widget_bubble_text_color, show_powered_by FROM merchants WHERE slug = ${slug}`
     )
     const rows = result.rows as unknown as any[]
     if (rows && rows.length > 0) {
