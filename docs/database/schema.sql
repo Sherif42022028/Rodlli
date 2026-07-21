@@ -75,6 +75,14 @@ CREATE TABLE IF NOT EXISTS products (
     description TEXT,
     image_urls TEXT[],
     catalog_file_url TEXT,
+    product_type TEXT DEFAULT 'physical', -- 'physical' | 'service'
+    in_stock BOOLEAN DEFAULT true,
+    availability TEXT,
+    colors TEXT,
+    sizes TEXT,
+    category_name TEXT,
+    attributes JSONB,
+    extra_attributes JSONB DEFAULT '{}'::jsonb,
     is_active BOOLEAN DEFAULT true,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );

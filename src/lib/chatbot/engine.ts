@@ -278,7 +278,8 @@ export class ChatbotEngine {
            "confident": true/false
          }
       2. If the user query is outside the scope of the store data or the tools do not return matching info, set "confident" to false. Set "reply" to an apology stating you don't have this info.
-      3. Respond concisely (maximum 2-3 sentences) in the same language as the user query.
+      3. If product or service details contain extra attributes (like colors, sizes, ingredients, allergens, portion size, model, warranty, specs, service duration, or available times/days), include them naturally in your response. If an attribute is missing, do not mention it.
+      4. Respond concisely (maximum 2-3 sentences) in the same language as the user query.
     `
 
     const model = genAI.getGenerativeModel({
@@ -474,7 +475,8 @@ export class ChatbotEngine {
            "confident": true/false
          }
       2. If the user query is outside the scope of the store data or the tools do not return matching info, set "confident" to false. Set "reply" to an apology stating you don't have this info.
-      3. Respond concisely (maximum 2-3 sentences) in the same language as the user query.
+      3. If product or service details contain extra attributes (like colors, sizes, ingredients, allergens, portion size, model, warranty, specs, service duration, or available times/days), include them naturally in your response. If an attribute is missing, do not mention it.
+      4. Respond concisely (maximum 2-3 sentences) in the same language as the user query.
     `
 
     // Build message thread

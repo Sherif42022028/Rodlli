@@ -6,7 +6,7 @@ export async function searchProducts(query: string, merchantId: string) {
   try {
     const searchPattern = `%${query}%`
     const result = await db.execute(
-      sql`SELECT id, name, price, description, image_urls, colors, sizes, category_name 
+      sql`SELECT id, name, price, description, image_urls, colors, sizes, category_name, product_type, in_stock, availability, extra_attributes 
           FROM products 
           WHERE merchant_id = ${merchantId} AND is_active = true 
             AND (
@@ -15,6 +15,7 @@ export async function searchProducts(query: string, merchantId: string) {
               OR colors ILIKE ${searchPattern} 
               OR sizes ILIKE ${searchPattern}
               OR category_name ILIKE ${searchPattern}
+              OR extra_attributes::text ILIKE ${searchPattern}
             )
           LIMIT 5`
     )
@@ -29,7 +30,7 @@ export async function searchProducts(query: string, merchantId: string) {
 export async function getProductDetails(productId: string) {
   try {
     const result = await db.execute(
-      sql`SELECT id, name, price, description, image_urls, colors, sizes, category_name FROM products WHERE id = ${productId} LIMIT 1`
+      sql`SELECT id, name, price, description, image_urls, colors, sizes, category_name, product_type, in_stock, availability, extra_attributes FROM products WHERE id = ${productId} LIMIT 1`
     )
     const rows = result.rows as unknown as any[]
     if (rows && rows.length > 0) {

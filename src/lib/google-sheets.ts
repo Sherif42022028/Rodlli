@@ -1,6 +1,7 @@
 import { db } from '@/lib/db'
 import { sql } from 'drizzle-orm'
 import { decryptToken } from '@/lib/encryption'
+import { getCategoryTemplate } from '@/lib/constants/category-templates'
 
 const GOOGLE_CLIENT_ID = (process.env.GOOGLE_CLIENT_ID || process.env.GOOGLE_SHEETS_CLIENT_ID || '').trim()
 const GOOGLE_CLIENT_SECRET = (process.env.GOOGLE_CLIENT_SECRET || process.env.GOOGLE_SHEETS_CLIENT_SECRET || '').trim()
@@ -126,9 +127,9 @@ export async function fetchSheetRows(spreadsheetId: string, accessToken: string,
  */
 export async function syncMerchantSheet(merchantId: string) {
   try {
-    // 1. Fetch merchant details
+    // 1. Fetch merchant details including business_category
     const merchantRes = await db.execute(
-      sql`SELECT id, google_sheet_id, google_refresh_token, sheet_sync_enabled FROM merchants WHERE id = ${merchantId}`
+      sql`SELECT id, google_sheet_id, google_refresh_token, sheet_sync_enabled, business_category FROM merchants WHERE id = ${merchantId}`
     )
     const merchantRows = merchantRes.rows as unknown as any[]
     if (!merchantRows || merchantRows.length === 0) {
@@ -139,6 +140,9 @@ export async function syncMerchantSheet(merchantId: string) {
     if (!merchant.google_sheet_id || !merchant.google_refresh_token) {
       return { error: 'Google Sheet is not connected' }
     }
+
+    // Resolve Category Template
+    const template = getCategoryTemplate(merchant.business_category)
 
     // 2. Get fresh Access Token
     let accessToken: string
@@ -189,16 +193,19 @@ export async function syncMerchantSheet(merchantId: string) {
 
     // 5. Parse and Validate Rows
     // Expected structure:
-    // Col A (0): Name | Col B (1): Price | Col C (2): Description | Col D (3): Available (نعم/لا) | Col E (4): Image URL | Col F (5): Colors | Col G (6): Sizes | Col H (7): Category
+    // Col A (0): Name | Col B (1): Price | Col C (2): Description | Col D (3): Stock/Available or Availability | Col E (4): Image URL | Col F (5)+: Extra Fields (Category Template)
     const validProductsToSync: Array<{
       name: string
       price: number
       description: string
       inStock: boolean
+      availability: string
+      productType: string
       imageUrl: string
       colors: string
       sizes: string
       categoryName: string
+      extraAttributes: Record<string, any>
     }> = []
 
     for (let i = 0; i < rows.length; i++) {
@@ -232,31 +239,54 @@ export async function syncMerchantSheet(merchantId: string) {
       }
 
       const description = row[2] ? String(row[2]).trim() : ''
-      const rawAvailable = row[3] ? String(row[3]).trim().toLowerCase() : ''
+      const rawAvailable = row[3] ? String(row[3]).trim() : ''
       
-      // Stock check: default is true unless explicitly 'لا', 'no', 'false', '0', 'غير متوفر'
-      const inStock = !(
-        rawAvailable === 'لا' || 
-        rawAvailable === 'no' || 
-        rawAvailable === 'false' || 
-        rawAvailable === '0' || 
-        rawAvailable.includes('غير')
-      )
+      let inStock = true
+      let availability = ''
+
+      if (template.productType === 'service') {
+        inStock = true
+        availability = rawAvailable
+      } else {
+        const lowerAvail = rawAvailable.toLowerCase()
+        inStock = !(
+          lowerAvail === 'لا' || 
+          lowerAvail === 'no' || 
+          lowerAvail === 'false' || 
+          lowerAvail === '0' || 
+          lowerAvail.includes('غير')
+        )
+        availability = rawAvailable
+      }
 
       const imageUrl = row[4] ? String(row[4]).trim() : ''
       const colors = row[5] ? String(row[5]).trim() : ''
       const sizes = row[6] ? String(row[6]).trim() : ''
       const categoryName = row[7] ? String(row[7]).trim() : ''
 
+      // Dynamic Extra Attributes mapping
+      const extraAttributes: Record<string, any> = {}
+      if (template.extraFields && template.extraFields.length > 0) {
+        template.extraFields.forEach((fieldKey, idx) => {
+          const colVal = row[5 + idx] ? String(row[5 + idx]).trim() : ''
+          if (colVal) {
+            extraAttributes[fieldKey] = colVal
+          }
+        })
+      }
+
       validProductsToSync.push({
         name: rawName,
         price: priceNum,
         description,
         inStock,
+        availability,
+        productType: template.productType,
         imageUrl,
         colors,
         sizes,
-        categoryName
+        categoryName,
+        extraAttributes
       })
     }
 
@@ -292,6 +322,7 @@ export async function syncMerchantSheet(merchantId: string) {
       const existing = existingMap.get(key)
       const imagesArray = prodItem.imageUrl ? [prodItem.imageUrl] : []
       const arrayLiteral = '{' + imagesArray.map((img: string) => `"${img.replace(/"/g, '\\"')}"`).join(',') + '}'
+      const extraJson = JSON.stringify(prodItem.extraAttributes)
 
       if (existing) {
         // Update existing product
@@ -304,14 +335,25 @@ export async function syncMerchantSheet(merchantId: string) {
                   is_active = ${prodItem.inStock},
                   colors = ${prodItem.colors || null},
                   sizes = ${prodItem.sizes || null},
-                  category_name = ${prodItem.categoryName || null}
+                  category_name = ${prodItem.categoryName || null},
+                  product_type = ${prodItem.productType},
+                  in_stock = ${prodItem.inStock},
+                  availability = ${prodItem.availability || null},
+                  extra_attributes = ${extraJson}::jsonb
               WHERE id = ${existing.id}`
         )
       } else {
         // Add new product
         const insertRes = await db.execute(
-          sql`INSERT INTO products (merchant_id, name, price, description, image_urls, is_active, colors, sizes, category_name)
-              VALUES (${merchantId}, ${prodItem.name}, ${prodItem.price}, ${prodItem.description || null}, ${arrayLiteral}, ${prodItem.inStock}, ${prodItem.colors || null}, ${prodItem.sizes || null}, ${prodItem.categoryName || null})
+          sql`INSERT INTO products (
+                merchant_id, name, price, description, image_urls, is_active, 
+                colors, sizes, category_name, product_type, in_stock, availability, extra_attributes
+              )
+              VALUES (
+                ${merchantId}, ${prodItem.name}, ${prodItem.price}, ${prodItem.description || null}, ${arrayLiteral}, 
+                ${prodItem.inStock}, ${prodItem.colors || null}, ${prodItem.sizes || null}, ${prodItem.categoryName || null},
+                ${prodItem.productType}, ${prodItem.inStock}, ${prodItem.availability || null}, ${extraJson}::jsonb
+              )
               RETURNING id`
         )
         const insertedRows = insertRes.rows as unknown as any[]
