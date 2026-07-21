@@ -20,6 +20,10 @@ export async function getMerchantBySlug(slug: string) {
   }
 }
 
+/**
+ * ⚠️ SINGLE SOURCE OF TRUTH لمنطق رد البوت — يُستخدم من /chat و /widget معًا.
+ * أي تعديل هنا يطبق على جميع الأماكن تلقائيًا. ممنوع إنشاء مسار منفصل لهذا المنطق.
+ */
 export async function queryChatbot(message: string, merchantId: string, language: 'en' | 'ar' = 'en', conversationId?: string | null) {
   if (!message || !merchantId) {
     return { error: 'Missing required parameters' }

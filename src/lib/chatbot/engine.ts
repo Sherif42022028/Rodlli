@@ -142,6 +142,10 @@ export class ChatbotEngine {
     }
   }
 
+  /**
+   * ⚠️ SINGLE SOURCE OF TRUTH — المحرك الأساسي لمعالجة الاستعلامات (Hybrid Engine).
+   * يُستدعى بواسطة Server Action `queryChatbot` المستهلك من قِبل الشات المستقل والـ Widget الإطار.
+   */
   async processMessage(
     userMessage: string, 
     language: 'en' | 'ar' = 'en',
