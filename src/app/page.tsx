@@ -219,8 +219,8 @@ export default function Home() {
                     </h4>
                     <p className="text-sm text-dark-600">
                       {language === 'en' 
-                        ? 'Built using Supabase authentication and strict Row-Level Security (RLS) data rules.' 
-                        : 'مبني باستخدام نظام صلاحيات Supabase وقواعد أمان صارمة RLS لحماية بياناتك.'}
+                        ? 'Built with NextAuth session protection and isolated tenant-scoped database queries for enterprise data privacy.' 
+                        : 'مبني مع نظام جلسات أمان NextAuth وقواعد عزل صارمة لبيانات التاجر وحمايتها.'}
                     </p>
                   </div>
                 </div>
@@ -289,7 +289,7 @@ export default function Home() {
                         <div className="w-10 h-10 rounded bg-primary-100 flex items-center justify-center text-primary-500 font-bold">🛒</div>
                         <div>
                           <p className="font-bold text-dark-950">Latte Coffee</p>
-                          <p className="text-[10px] text-primary-600 font-semibold">$4.50</p>
+                          <p className="text-[10px] text-primary-600 font-semibold">{language === 'en' ? '45 EGP' : '45 ج.م'}</p>
                         </div>
                       </div>
                     </div>

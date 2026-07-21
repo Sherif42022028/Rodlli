@@ -21,6 +21,17 @@ function AnimatedMascot() {
   const clonedScene = useState(() => {
     const s = scene.clone();
     
+    // ضبط الخامات تلقائياً لتفادي البقع الداكنة أو الانعكاسات الزائدة برمجياً
+    s.traverse((child) => {
+      if ((child as THREE.Mesh).isMesh && (child as THREE.Mesh).material) {
+        const mat = (child as THREE.Mesh).material as THREE.MeshStandardMaterial;
+        if (mat) {
+          mat.metalness = Math.min(mat.metalness || 0, 0.2);
+          mat.roughness = Math.max(mat.roughness || 0.5, 0.6);
+        }
+      }
+    });
+
     // حساب الحدود المحيطة بالموديل لتركيزه في المنتصف [0, 0, 0]
     const box = new THREE.Box3().setFromObject(s);
     const center = new THREE.Vector3();
@@ -93,11 +104,11 @@ export default function HomeMascot3D() {
           camera={{ position: [0, 0, 3.5], fov: 40 }}
           dpr={[1, 2]} // يحافظ على وضوح الموديل على شاشات retina من غير ما يبالغ في الأداء
         >
-          <ambientLight intensity={1.8} />
-          <directionalLight position={[4, 5, 4]} intensity={2.5} />
-          <directionalLight position={[-4, 3, 2]} intensity={1.5} />
-          <pointLight position={[0, 1, 3]} intensity={1.8} />
-          <pointLight position={[0, -2, 2]} intensity={0.8} />
+          <ambientLight intensity={2.2} />
+          <directionalLight position={[4, 5, 4]} intensity={2.8} />
+          <directionalLight position={[-4, 3, 2]} intensity={1.6} />
+          <directionalLight position={[0, -3, 3]} intensity={0.8} />
+          <pointLight position={[0, 1.5, 3.5]} intensity={2.2} color="#FFFFFF" />
           <AnimatedMascot />
         </Canvas>
       </Suspense>
