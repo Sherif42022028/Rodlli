@@ -150,28 +150,45 @@ export class ChatbotEngine {
       await this.logContactRequest(conversationId)
     }
 
-    const zhipuApiKey = process.env.ZHIPU_API_KEY
+    // Layer 1: Deterministic / Rule-Based Engine First
+    // Instant response (0ms AI delay, 0 cost, 100% deterministic accuracy)
+    const localResult = await this.processMessageLocal(userMessage, language, conversationId)
+    if (localResult.confident) {
+      return localResult
+    }
 
+    // Layer 2: AI Layer (Zhipu GLM / Gemini Function Calling)
+    const zhipuApiKey = process.env.ZHIPU_API_KEY
     if (zhipuApiKey) {
       try {
-        return await this.processMessageWithZhipu(userMessage, language, zhipuApiKey, conversationId)
+        const aiResult = await this.processMessageWithZhipu(userMessage, language, zhipuApiKey, conversationId)
+        if (aiResult.confident) {
+          return aiResult
+        }
+        // If AI executed but was not confident, return the AI fallback response (already logged to unanswered_questions)
+        return aiResult
       } catch (error) {
         console.error('Zhipu AI processing failed, falling back to Gemini/local engine:', error)
       }
     }
 
     const apiKey = process.env.GEMINI_API_KEY
-
     if (apiKey) {
       try {
-        return await this.processMessageWithGemini(userMessage, language, apiKey, conversationId)
+        const aiResult = await this.processMessageWithGemini(userMessage, language, apiKey, conversationId)
+        if (aiResult.confident) {
+          return aiResult
+        }
+        // If AI executed but was not confident, return the AI fallback response (already logged to unanswered_questions)
+        return aiResult
       } catch (error) {
         console.error('Gemini processing failed, falling back to local engine:', error)
       }
     }
 
-    // Default local fallback engine
-    return await this.processMessageLocal(userMessage, language, conversationId)
+    // Layer 3: Pure Local Fallback when no AI provider key is configured or AI execution failed
+    await this.logUnansweredQuestion(userMessage, conversationId)
+    return localResult
   }
 
   // 1. Google Gemini AI Engine with Function Calling and Memory
@@ -628,6 +645,19 @@ export class ChatbotEngine {
               { text: "View Products Catalog", textAr: "كتالوج المنتجات", action: 'show_menu' }
             ]
           }
+        } else if (/^(rd-|ord-|-|#)/i.test(potentialOrderId) || lowerMsg.includes('#')) {
+          // Explicit order ID structure supplied but not found in DB
+          await this.logToolCall('checkOrderStatus', { orderId: potentialOrderId }, conversationId, null)
+          return {
+            text: language === 'en'
+              ? `🔍 Order *#${potentialOrderId}* was not found in our records. Please verify your order ID or contact store support.`
+              : `🔍 لم نتمكن من العثور على أوردر برقم *#${potentialOrderId}* في سجلاتنا. يرجى التأكد من رقم الطلب أو التواصل مع الدعم.`,
+            type: 'text',
+            confident: true,
+            quickReplies: [
+              { text: "Contact Support", textAr: "التحدث مع الدعم", action: 'contact_support' }
+            ]
+          }
         }
       }
     }
@@ -667,10 +697,7 @@ export class ChatbotEngine {
       return faqResponse
     }
 
-    // Log query into unanswered_questions as it is not matched locally
-    await this.logUnansweredQuestion(userMessage, conversationId)
-
-    // 5. Fallback Response
+    // 5. Fallback Response (Unmatched in Layer 1, will delegate to Layer 2 / Layer 3)
     return {
       text: language === 'en'
         ? "I'm sorry, I couldn't find an answer to that. I have logged your question for the merchant!"
