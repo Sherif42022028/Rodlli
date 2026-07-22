@@ -4,7 +4,7 @@
  */
 
 const EVOLUTION_API_URL = (process.env.EVOLUTION_API_URL || 'http://localhost:8080').replace(/\/$/, '')
-const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY || 'rodlli_evolution_global_key_2026'
+const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY || '429683C4C977415CAAFCCE10F7D57E11'
 const PUBLIC_APP_URL = (process.env.NEXTAUTH_URL || process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000').replace(/\/$/, '')
 
 const headers = {
