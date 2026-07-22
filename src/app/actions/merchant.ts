@@ -9,6 +9,7 @@ import {
   getWhatsAppConnectionState, 
   disconnectWhatsAppInstance 
 } from '@/lib/evolution-api'
+import { initDirectBaileysSession, getDirectBaileysQRCode } from '@/lib/baileys-direct'
 
 // 1. Get Merchant profile
 export async function getMerchantByProfileId(profileId: string) {
@@ -436,18 +437,35 @@ export async function connectWhatsAppAction(merchantId: string) {
 
     const instanceName = merchant.whatsapp_instance_name || `rodlli_${merchant.slug || merchant.id.substring(0, 8)}`
 
-    // 1. Create instance in Evolution API
-    await createWhatsAppInstance(instanceName)
+    // Option 1: Use external Evolution API if configured with a custom URL
+    if (process.env.EVOLUTION_API_URL && !process.env.EVOLUTION_API_URL.includes('localhost')) {
+      await createWhatsAppInstance(instanceName)
+      const qrRes = await getWhatsAppQRCode(instanceName)
+      await db.execute(
+        sql`UPDATE merchants 
+            SET whatsapp_instance_name = ${instanceName}, 
+                whatsapp_status = 'connecting', 
+                whatsapp_qr_code = ${qrRes.qrCode || null}, 
+                updated_at = NOW() 
+            WHERE id = ${merchantId}`
+      )
+      return { 
+        success: true, 
+        instanceName, 
+        qrCode: qrRes.qrCode || null,
+        isFallback: qrRes.isFallback || false
+      }
+    }
 
-    // 2. Get QR Code
-    const qrRes = await getWhatsAppQRCode(instanceName)
+    // Option 2: Direct Built-in Baileys Session inside Next.js (Authentic Baileys QR Code!)
+    await initDirectBaileysSession(merchantId, instanceName)
+    const directQRCode = await getDirectBaileysQRCode(instanceName)
 
-    // 3. Update database
     await db.execute(
       sql`UPDATE merchants 
           SET whatsapp_instance_name = ${instanceName}, 
               whatsapp_status = 'connecting', 
-              whatsapp_qr_code = ${qrRes.qrCode || null}, 
+              whatsapp_qr_code = ${directQRCode || null}, 
               updated_at = NOW() 
           WHERE id = ${merchantId}`
     )
@@ -455,8 +473,8 @@ export async function connectWhatsAppAction(merchantId: string) {
     return { 
       success: true, 
       instanceName, 
-      qrCode: qrRes.qrCode || null,
-      isFallback: qrRes.isFallback || false
+      qrCode: directQRCode || null,
+      isFallback: false
     }
   } catch (error: any) {
     console.error('connectWhatsAppAction error:', error)
@@ -476,41 +494,54 @@ export async function getWhatsAppStatusAction(merchantId: string) {
 
     const instanceName = merchant.whatsapp_instance_name
 
-    // Query Evolution API for live connection state
-    const stateRes = await getWhatsAppConnectionState(instanceName)
-    let liveStatus = stateRes.state || 'disconnected'
-    let currentQRCode = merchant.whatsapp_qr_code
-    let isFallback = false
+    if (process.env.EVOLUTION_API_URL && !process.env.EVOLUTION_API_URL.includes('localhost')) {
+      const stateRes = await getWhatsAppConnectionState(instanceName)
+      let liveStatus = stateRes.state || 'disconnected'
+      let currentQRCode = merchant.whatsapp_qr_code
+      let isFallback = false
 
-    if (liveStatus === 'open') {
-      currentQRCode = null
-      await db.execute(
-        sql`UPDATE merchants 
-            SET whatsapp_status = 'open', 
-                whatsapp_qr_code = NULL, 
-                updated_at = NOW() 
-            WHERE id = ${merchantId}`
-      )
-    } else if (liveStatus === 'connecting' || liveStatus === 'close' || liveStatus === 'disconnected') {
-      const qrRes = await getWhatsAppQRCode(instanceName)
-      isFallback = qrRes.isFallback || false
-      if (qrRes.qrCode) {
-        currentQRCode = qrRes.qrCode
-        liveStatus = 'connecting'
+      if (liveStatus === 'open') {
+        currentQRCode = null
         await db.execute(
           sql`UPDATE merchants 
-              SET whatsapp_status = 'connecting', 
-                  whatsapp_qr_code = ${currentQRCode}, 
+              SET whatsapp_status = 'open', 
+                  whatsapp_qr_code = NULL, 
                   updated_at = NOW() 
               WHERE id = ${merchantId}`
         )
+      } else {
+        const qrRes = await getWhatsAppQRCode(instanceName)
+        isFallback = qrRes.isFallback || false
+        if (qrRes.qrCode) {
+          currentQRCode = qrRes.qrCode
+          liveStatus = 'connecting'
+          await db.execute(
+            sql`UPDATE merchants 
+                SET whatsapp_status = 'connecting', 
+                    whatsapp_qr_code = ${currentQRCode}, 
+                    updated_at = NOW() 
+                WHERE id = ${merchantId}`
+          )
+        }
+      }
+
+      return { 
+        status: liveStatus, 
+        qrCode: currentQRCode, 
+        isFallback,
+        phone: merchant.whatsapp_phone || null,
+        instanceName
       }
     }
 
+    // Direct Built-in Baileys state check
+    const directQRCode = await getDirectBaileysQRCode(instanceName)
+    const liveStatus = merchant.whatsapp_status || 'connecting'
+
     return { 
       status: liveStatus, 
-      qrCode: currentQRCode, 
-      isFallback,
+      qrCode: directQRCode || merchant.whatsapp_qr_code || null, 
+      isFallback: false,
       phone: merchant.whatsapp_phone || null,
       instanceName
     }
