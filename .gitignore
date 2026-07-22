@@ -34,3 +34,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# microservice repos
+/whatsapp-api-main
+/evolution-api-main

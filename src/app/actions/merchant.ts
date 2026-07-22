@@ -3,6 +3,12 @@
 import { db } from '@/lib/db'
 import { sql } from 'drizzle-orm'
 import { extractSpreadsheetId, syncMerchantSheet, syncMerchantOrders } from '@/lib/google-sheets'
+import { 
+  createWhatsAppInstance, 
+  getWhatsAppQRCode, 
+  getWhatsAppConnectionState, 
+  disconnectWhatsAppInstance 
+} from '@/lib/evolution-api'
 
 // 1. Get Merchant profile
 export async function getMerchantByProfileId(profileId: string) {
@@ -416,5 +422,125 @@ export async function updateMerchantWidgetColor(merchantId: string, color: strin
     return { error: error.message || 'فشل حفظ لون الـ Widget' }
   }
 }
+
+// 7. WhatsApp Integration Operations (Evolution API)
+export async function connectWhatsAppAction(merchantId: string) {
+  try {
+    const res = await db.execute(
+      sql`SELECT id, slug, whatsapp_instance_name FROM merchants WHERE id = ${merchantId}`
+    )
+    const merchant = (res.rows as unknown as any[])[0]
+    if (!merchant) {
+      return { error: 'المتجر غير موجود' }
+    }
+
+    const instanceName = merchant.whatsapp_instance_name || `rodlli_${merchant.slug || merchant.id.substring(0, 8)}`
+
+    // 1. Create instance in Evolution API
+    await createWhatsAppInstance(instanceName)
+
+    // 2. Get QR Code
+    const qrRes = await getWhatsAppQRCode(instanceName)
+
+    // 3. Update database
+    await db.execute(
+      sql`UPDATE merchants 
+          SET whatsapp_instance_name = ${instanceName}, 
+              whatsapp_status = 'connecting', 
+              whatsapp_qr_code = ${qrRes.qrCode || null}, 
+              updated_at = NOW() 
+          WHERE id = ${merchantId}`
+    )
+
+    return { 
+      success: true, 
+      instanceName, 
+      qrCode: qrRes.qrCode || null 
+    }
+  } catch (error: any) {
+    console.error('connectWhatsAppAction error:', error)
+    return { error: error.message || 'فشل البدء في ربط الواتساب' }
+  }
+}
+
+export async function getWhatsAppStatusAction(merchantId: string) {
+  try {
+    const res = await db.execute(
+      sql`SELECT id, slug, whatsapp_instance_name, whatsapp_status, whatsapp_phone, whatsapp_qr_code FROM merchants WHERE id = ${merchantId}`
+    )
+    const merchant = (res.rows as unknown as any[])[0]
+    if (!merchant || !merchant.whatsapp_instance_name) {
+      return { status: 'disconnected', qrCode: null, phone: null }
+    }
+
+    const instanceName = merchant.whatsapp_instance_name
+
+    // Query Evolution API for live connection state
+    const stateRes = await getWhatsAppConnectionState(instanceName)
+    let liveStatus = stateRes.state || 'disconnected'
+    let currentQRCode = merchant.whatsapp_qr_code
+
+    if (liveStatus === 'open') {
+      currentQRCode = null
+      await db.execute(
+        sql`UPDATE merchants 
+            SET whatsapp_status = 'open', 
+                whatsapp_qr_code = NULL, 
+                updated_at = NOW() 
+            WHERE id = ${merchantId}`
+      )
+    } else if (liveStatus === 'connecting' || liveStatus === 'close' || liveStatus === 'disconnected') {
+      const qrRes = await getWhatsAppQRCode(instanceName)
+      if (qrRes.qrCode) {
+        currentQRCode = qrRes.qrCode
+        liveStatus = 'connecting'
+        await db.execute(
+          sql`UPDATE merchants 
+              SET whatsapp_status = 'connecting', 
+                  whatsapp_qr_code = ${currentQRCode}, 
+                  updated_at = NOW() 
+              WHERE id = ${merchantId}`
+        )
+      }
+    }
+
+    return { 
+      status: liveStatus, 
+      qrCode: currentQRCode, 
+      phone: merchant.whatsapp_phone || null,
+      instanceName
+    }
+  } catch (error: any) {
+    console.error('getWhatsAppStatusAction error:', error)
+    return { status: 'disconnected', qrCode: null, phone: null }
+  }
+}
+
+export async function disconnectWhatsAppAction(merchantId: string) {
+  try {
+    const res = await db.execute(
+      sql`SELECT id, whatsapp_instance_name FROM merchants WHERE id = ${merchantId}`
+    )
+    const merchant = (res.rows as unknown as any[])[0]
+    if (merchant && merchant.whatsapp_instance_name) {
+      await disconnectWhatsAppInstance(merchant.whatsapp_instance_name)
+    }
+
+    await db.execute(
+      sql`UPDATE merchants 
+          SET whatsapp_status = 'disconnected', 
+              whatsapp_qr_code = NULL, 
+              whatsapp_phone = NULL, 
+              updated_at = NOW() 
+          WHERE id = ${merchantId}`
+    )
+
+    return { success: true }
+  } catch (error: any) {
+    console.error('disconnectWhatsAppAction error:', error)
+    return { error: error.message || 'فشل إلغاء ربط الواتساب' }
+  }
+}
+
 
 

@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslation } from '@/components/layout/I18nProvider'
-import { upsertMerchant, addProduct, deleteProduct, deleteProductsBulk, deleteAllMerchantProducts, addFAQ, deleteFAQ, updateWorkingHours, resolveUnansweredQuestion, saveMerchantSheetLink, triggerManualSheetSync, disconnectMerchantSheet, saveMerchantOrdersSheetLink, triggerManualOrdersSync, disconnectMerchantOrdersSheet, getMerchantOrders, updateMerchantWidgetColor } from '@/app/actions/merchant'
+import { upsertMerchant, addProduct, deleteProduct, deleteProductsBulk, deleteAllMerchantProducts, addFAQ, deleteFAQ, updateWorkingHours, resolveUnansweredQuestion, saveMerchantSheetLink, triggerManualSheetSync, disconnectMerchantSheet, saveMerchantOrdersSheetLink, triggerManualOrdersSync, disconnectMerchantOrdersSheet, getMerchantOrders, updateMerchantWidgetColor, connectWhatsAppAction, disconnectWhatsAppAction, getWhatsAppStatusAction } from '@/app/actions/merchant'
 import { getAnalyticsTrend } from '@/app/actions/analytics'
 import { getContrastTextColor } from '@/lib/colors'
 import { 
@@ -56,6 +56,57 @@ export default function MerchantDashboardClient({
   const [trendData, setTrendData] = useState(analyticsTrend)
   const [loadingTrend, setLoadingTrend] = useState(false)
   const [mounted, setMounted] = useState(false)
+
+  // WhatsApp Integration States
+  const [waStatus, setWaStatus] = useState<string>(merchant.whatsapp_status || 'disconnected')
+  const [waQRCode, setWaQRCode] = useState<string | null>(merchant.whatsapp_qr_code || null)
+  const [waPhone, setWaPhone] = useState<string | null>(merchant.whatsapp_phone || null)
+  const [waLoading, setWaLoading] = useState<boolean>(false)
+
+  useEffect(() => {
+    if (waStatus === 'connecting') {
+      const interval = setInterval(async () => {
+        const res = await getWhatsAppStatusAction(merchant.id)
+        setWaStatus(res.status)
+        if (res.qrCode) setWaQRCode(res.qrCode)
+        if (res.phone) setWaPhone(res.phone)
+        if (res.status === 'open') {
+          clearInterval(interval)
+        }
+      }, 5000)
+      return () => clearInterval(interval)
+    }
+  }, [waStatus, merchant.id])
+
+  const handleConnectWhatsApp = async () => {
+    setWaLoading(true)
+    const res = await connectWhatsAppAction(merchant.id)
+    setWaLoading(false)
+    if (res.success) {
+      setWaStatus('connecting')
+      if (res.qrCode) setWaQRCode(res.qrCode)
+    } else {
+      setErrorMsg(res.error || 'فشل البدء في ربط الواتساب')
+    }
+  }
+
+  const handleRefreshWhatsAppStatus = async () => {
+    setWaLoading(true)
+    const res = await getWhatsAppStatusAction(merchant.id)
+    setWaLoading(false)
+    setWaStatus(res.status)
+    setWaQRCode(res.qrCode)
+    if (res.phone) setWaPhone(res.phone)
+  }
+
+  const handleDisconnectWhatsApp = async () => {
+    setWaLoading(true)
+    await disconnectWhatsAppAction(merchant.id)
+    setWaLoading(false)
+    setWaStatus('disconnected')
+    setWaQRCode(null)
+    setWaPhone(null)
+  }
 
   useEffect(() => {
     setMounted(true)
@@ -2098,6 +2149,107 @@ export default function MerchantDashboardClient({
                     </div>
                   </div>
                 </div>
+              </div>
+            </div>
+
+            {/* WhatsApp QR Code Connection Section */}
+            <div className="pt-6 border-t border-dark-100 space-y-4">
+              <div>
+                <h3 className="text-md font-bold text-dark-950 flex items-center gap-2">
+                  <MessageSquare className="w-4 h-4 text-emerald-500" />
+                  {language === 'en' ? 'WhatsApp Integration (QR Code)' : 'ربط الواتساب (QR Code)'}
+                </h3>
+                <p className="text-sm text-dark-600 max-w-xl mt-1">
+                  {language === 'en'
+                    ? 'Connect your WhatsApp number to let Rodlli bot automatically answer incoming customer messages on WhatsApp 24/7.'
+                    : 'ربط رقم الواتساب الخاص بمتجرك لكي يقوم الشات بوت بالرد التلقائي على محادثات العملاء على الواتساب على مدار 24 ساعة.'}
+                </p>
+              </div>
+
+              <div className="bg-cream-50 border border-dark-100 p-5 rounded-2xl max-w-2xl space-y-4">
+                {/* Connection Status Badge */}
+                <div className="flex items-center justify-between flex-wrap gap-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-dark-700">
+                      {language === 'en' ? 'Status:' : 'حالة الاتصال:'}
+                    </span>
+                    {waStatus === 'open' ? (
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                        {language === 'en' ? 'Connected' : 'متصل بنجاح 🟢'}
+                        {waPhone && ` (${waPhone})`}
+                      </span>
+                    ) : waStatus === 'connecting' ? (
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-100 text-amber-800 text-xs font-bold">
+                        <RefreshCw className="w-3 h-3 animate-spin text-amber-600" />
+                        {language === 'en' ? 'Waiting for QR scan...' : 'في انتظار مسح الـ QR Code 🟡'}
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-cream-200 text-dark-600 text-xs font-bold">
+                        <span className="w-2 h-2 rounded-full bg-dark-400" />
+                        {language === 'en' ? 'Disconnected' : 'غير متصل 🔴'}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleRefreshWhatsAppStatus}
+                      disabled={waLoading}
+                      className="flex items-center gap-1 px-3 py-1.5 rounded-xl border border-dark-200 bg-white hover:bg-cream-100 text-xs font-semibold text-dark-800 transition-colors"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${waLoading ? 'animate-spin' : ''}`} />
+                      {language === 'en' ? 'Refresh Status' : 'تحديث الحالة'}
+                    </button>
+
+                    {waStatus === 'open' ? (
+                      <button
+                        onClick={handleDisconnectWhatsApp}
+                        disabled={waLoading}
+                        className="flex items-center gap-1 px-3.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-colors disabled:opacity-50"
+                      >
+                        {language === 'en' ? 'Disconnect' : 'فصل الحساب'}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={handleConnectWhatsApp}
+                        disabled={waLoading}
+                        className="flex items-center gap-1 px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors disabled:opacity-50 shadow-sm"
+                      >
+                        {waLoading 
+                          ? (language === 'en' ? 'Generating QR...' : 'جاري توليد الـ QR...') 
+                          : (language === 'en' ? 'Generate QR Code' : 'ربط الواتساب بـ QR Code')}
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* QR Code Display when connecting */}
+                {waStatus !== 'open' && waQRCode && (
+                  <div className="bg-white border border-dark-200 p-6 rounded-2xl flex flex-col items-center justify-center text-center space-y-3 shadow-sm">
+                    <h4 className="text-xs font-bold text-dark-900">
+                      {language === 'en' ? 'Scan this QR Code from WhatsApp app' : 'امسح الـ QR Code من تطبيق الواتساب بالموبايل'}
+                    </h4>
+                    <p className="text-[11px] text-dark-500 max-w-sm">
+                      {language === 'en' 
+                        ? 'Open WhatsApp on your phone -> Settings/Menu -> Linked Devices -> Link a Device, then scan this code.' 
+                        : 'افتح الواتساب على موبايلك > الإعدادات/القائمة > الأجهزة المرتبطة > ربط جهاز، ثم امسح الكود بالأسفل.'}
+                    </p>
+
+                    <div className="p-3 bg-white border border-dark-200 rounded-2xl shadow-inner inline-block">
+                      <img 
+                        src={waQRCode.startsWith('data:image') ? waQRCode : `data:image/png;base64,${waQRCode}`} 
+                        alt="WhatsApp QR Code" 
+                        className="w-52 h-52 object-contain mx-auto"
+                      />
+                    </div>
+
+                    <span className="text-[10px] text-amber-600 font-semibold flex items-center gap-1 animate-pulse">
+                      <Clock className="w-3 h-3" />
+                      {language === 'en' ? 'Checking status automatically every 5s...' : 'جاري التحقق من نجاح المسح تلقائياً كل 5 ثوانٍ...'}
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
           </div>
