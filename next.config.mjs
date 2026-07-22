@@ -1,6 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  serverExternalPackages: ['@whiskeysockets/baileys', 'sharp'],
+  experimental: {
+    serverComponentsExternalPackages: ['@whiskeysockets/baileys', 'sharp'],
+  },
   webpack: (config, { isServer }) => {
     if (isServer) {
       config.externals = config.externals || []

@@ -1,4 +1,5 @@
-import makeWASocket, { useMultiFileAuthState, DisconnectReason } from '@whiskeysockets/baileys'
+/* eslint-disable react-hooks/rules-of-hooks */
+import makeWASocket, { useMultiFileAuthState as getBaileysAuthState, DisconnectReason } from '@whiskeysockets/baileys'
 import QRCode from 'qrcode'
 import { db } from '@/lib/db'
 import { sql } from 'drizzle-orm'
@@ -21,7 +22,7 @@ export async function initDirectBaileysSession(merchantId: string, instanceName:
       fs.mkdirSync(authFolder, { recursive: true })
     }
 
-    const { state, saveCreds } = await useMultiFileAuthState(authFolder)
+    const { state, saveCreds } = await getBaileysAuthState(authFolder)
 
     const sock = makeWASocket({
       auth: state,
