@@ -2238,7 +2238,7 @@ export default function MerchantDashboardClient({
 
                     <div className="p-3 bg-white border border-dark-200 rounded-2xl shadow-inner inline-block">
                       <img 
-                        src={waQRCode.startsWith('data:image') ? waQRCode : `data:image/png;base64,${waQRCode}`} 
+                        src={waQRCode.startsWith('data:image') || waQRCode.startsWith('http') ? waQRCode : `data:image/png;base64,${waQRCode}`} 
                         alt="WhatsApp QR Code" 
                         className="w-52 h-52 object-contain mx-auto"
                       />
