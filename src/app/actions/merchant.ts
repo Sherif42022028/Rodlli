@@ -455,7 +455,8 @@ export async function connectWhatsAppAction(merchantId: string) {
     return { 
       success: true, 
       instanceName, 
-      qrCode: qrRes.qrCode || null 
+      qrCode: qrRes.qrCode || null,
+      isFallback: qrRes.isFallback || false
     }
   } catch (error: any) {
     console.error('connectWhatsAppAction error:', error)
@@ -470,7 +471,7 @@ export async function getWhatsAppStatusAction(merchantId: string) {
     )
     const merchant = (res.rows as unknown as any[])[0]
     if (!merchant || !merchant.whatsapp_instance_name) {
-      return { status: 'disconnected', qrCode: null, phone: null }
+      return { status: 'disconnected', qrCode: null, isFallback: false, phone: null }
     }
 
     const instanceName = merchant.whatsapp_instance_name
@@ -479,6 +480,7 @@ export async function getWhatsAppStatusAction(merchantId: string) {
     const stateRes = await getWhatsAppConnectionState(instanceName)
     let liveStatus = stateRes.state || 'disconnected'
     let currentQRCode = merchant.whatsapp_qr_code
+    let isFallback = false
 
     if (liveStatus === 'open') {
       currentQRCode = null
@@ -491,6 +493,7 @@ export async function getWhatsAppStatusAction(merchantId: string) {
       )
     } else if (liveStatus === 'connecting' || liveStatus === 'close' || liveStatus === 'disconnected') {
       const qrRes = await getWhatsAppQRCode(instanceName)
+      isFallback = qrRes.isFallback || false
       if (qrRes.qrCode) {
         currentQRCode = qrRes.qrCode
         liveStatus = 'connecting'
@@ -507,12 +510,13 @@ export async function getWhatsAppStatusAction(merchantId: string) {
     return { 
       status: liveStatus, 
       qrCode: currentQRCode, 
+      isFallback,
       phone: merchant.whatsapp_phone || null,
       instanceName
     }
   } catch (error: any) {
     console.error('getWhatsAppStatusAction error:', error)
-    return { status: 'disconnected', qrCode: null, phone: null }
+    return { status: 'disconnected', qrCode: null, isFallback: false, phone: null }
   }
 }
 

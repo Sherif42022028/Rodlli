@@ -61,6 +61,7 @@ export default function MerchantDashboardClient({
   const [waStatus, setWaStatus] = useState<string>(merchant.whatsapp_status || 'disconnected')
   const [waQRCode, setWaQRCode] = useState<string | null>(merchant.whatsapp_qr_code || null)
   const [waPhone, setWaPhone] = useState<string | null>(merchant.whatsapp_phone || null)
+  const [isWaFallback, setIsWaFallback] = useState<boolean>(false)
   const [waLoading, setWaLoading] = useState<boolean>(false)
 
   useEffect(() => {
@@ -70,6 +71,7 @@ export default function MerchantDashboardClient({
         setWaStatus(res.status)
         if (res.qrCode) setWaQRCode(res.qrCode)
         if (res.phone) setWaPhone(res.phone)
+        setIsWaFallback(res.isFallback || false)
         if (res.status === 'open') {
           clearInterval(interval)
         }
@@ -85,6 +87,7 @@ export default function MerchantDashboardClient({
     if (res.success) {
       setWaStatus('connecting')
       if (res.qrCode) setWaQRCode(res.qrCode)
+      setIsWaFallback(res.isFallback || false)
     } else {
       setErrorMsg(res.error || 'فشل البدء في ربط الواتساب')
     }
@@ -96,6 +99,7 @@ export default function MerchantDashboardClient({
     setWaLoading(false)
     setWaStatus(res.status)
     setWaQRCode(res.qrCode)
+    setIsWaFallback(res.isFallback || false)
     if (res.phone) setWaPhone(res.phone)
   }
 
@@ -106,6 +110,7 @@ export default function MerchantDashboardClient({
     setWaStatus('disconnected')
     setWaQRCode(null)
     setWaPhone(null)
+    setIsWaFallback(false)
   }
 
   useEffect(() => {
@@ -2230,11 +2235,25 @@ export default function MerchantDashboardClient({
                     <h4 className="text-xs font-bold text-dark-900">
                       {language === 'en' ? 'Scan this QR Code from WhatsApp app' : 'امسح الـ QR Code من تطبيق الواتساب بالموبايل'}
                     </h4>
-                    <p className="text-[11px] text-dark-500 max-w-sm">
-                      {language === 'en' 
-                        ? 'Open WhatsApp on your phone -> Settings/Menu -> Linked Devices -> Link a Device, then scan this code.' 
-                        : 'افتح الواتساب على موبايلك > الإعدادات/القائمة > الأجهزة المرتبطة > ربط جهاز، ثم امسح الكود بالأسفل.'}
-                    </p>
+                    {isWaFallback ? (
+                      <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl text-amber-800 text-xs space-y-1 text-center max-w-md">
+                        <p className="font-bold flex items-center justify-center gap-1 text-amber-900">
+                          <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                          {language === 'en' ? 'UI Demo Mode (Evolution Server Pending)' : 'معاينة الواجهة (في انتظار تشغيل سيرفر الواتساب)'}
+                        </p>
+                        <p className="text-[11px] text-amber-700 leading-relaxed">
+                          {language === 'en'
+                            ? 'The QR code below is a demo placeholder. Real scanning requires running the Evolution API server and connecting EVOLUTION_API_URL.'
+                            : 'الكود بالأسفل هو كود معاينة للواجهة. مسح الكود بالموبايل يتطلب تشغيل خادم Evolution API وتوصيل الرابط.'}
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-dark-500 max-w-sm">
+                        {language === 'en' 
+                          ? 'Open WhatsApp on your phone -> Settings/Menu -> Linked Devices -> Link a Device, then scan this code.' 
+                          : 'افتح الواتساب على موبايلك > الإعدادات/القائمة > الأجهزة المرتبطة > ربط جهاز، ثم امسح الكود بالأسفل.'}
+                      </p>
+                    )}
 
                     <div className="p-3 bg-white border border-dark-200 rounded-2xl shadow-inner inline-block">
                       <img 
