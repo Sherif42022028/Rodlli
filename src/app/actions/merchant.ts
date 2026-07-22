@@ -458,8 +458,8 @@ export async function connectWhatsAppAction(merchantId: string) {
     }
 
     // Option 2: Direct Built-in Baileys Session inside Next.js (Authentic Baileys QR Code!)
-    await initDirectBaileysSession(merchantId, instanceName)
-    const directQRCode = await getDirectBaileysQRCode(instanceName)
+    const directRes = await initDirectBaileysSession(merchantId, instanceName)
+    const directQRCode = directRes.qrCode || (await getDirectBaileysQRCode(instanceName))
 
     await db.execute(
       sql`UPDATE merchants 

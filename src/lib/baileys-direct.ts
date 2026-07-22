@@ -22,6 +22,14 @@ export async function initDirectBaileysSession(merchantId: string, instanceName:
       fs.mkdirSync(authFolder, { recursive: true })
     }
 
+    // Clear old demo fallback QR code from database first
+    await db.execute(
+      sql`UPDATE merchants 
+          SET whatsapp_status = 'connecting', 
+              whatsapp_qr_code = NULL 
+          WHERE id = ${merchantId}`
+    )
+
     const { state, saveCreds } = await getBaileysAuthState(authFolder)
 
     const sock = makeWASocket({
@@ -34,91 +42,64 @@ export async function initDirectBaileysSession(merchantId: string, instanceName:
 
     sock.ev.on('creds.update', saveCreds)
 
-    sock.ev.on('connection.update', async (update) => {
-      const { connection, lastDisconnect, qr } = update
+    const qrPromise = new Promise<string>((resolve) => {
+      const timeout = setTimeout(() => resolve(''), 4000)
 
-      if (qr) {
-        // Convert authentic WhatsApp Baileys payload string to base64 Data URL using `qrcode`
-        const qrDataUrl = await QRCode.toDataURL(qr, { width: 300, margin: 2 })
-        qrCodesMemory[instanceName] = qrDataUrl
+      sock.ev.on('connection.update', async (update) => {
+        const { connection, lastDisconnect, qr } = update
 
-        await db.execute(
-          sql`UPDATE merchants 
-              SET whatsapp_status = 'connecting', 
-                  whatsapp_qr_code = ${qrDataUrl}, 
-                  updated_at = NOW() 
-              WHERE id = ${merchantId}`
-        )
-      }
+        if (qr) {
+          // Convert authentic WhatsApp Baileys payload string to base64 Data URL using `qrcode`
+          const qrDataUrl = await QRCode.toDataURL(qr, { width: 300, margin: 2 })
+          qrCodesMemory[instanceName] = qrDataUrl
+          clearTimeout(timeout)
+          resolve(qrDataUrl)
 
-      if (connection === 'open') {
-        const phone = sock.user?.id ? sock.user.id.split(':')[0] : null
-        delete qrCodesMemory[instanceName]
-
-        await db.execute(
-          sql`UPDATE merchants 
-              SET whatsapp_status = 'open', 
-                  whatsapp_phone = ${phone}, 
-                  whatsapp_qr_code = NULL, 
-                  updated_at = NOW() 
-              WHERE id = ${merchantId}`
-        )
-      }
-
-      if (connection === 'close') {
-        const shouldReconnect = (lastDisconnect?.error as any)?.output?.statusCode !== DisconnectReason.loggedOut
-        if (shouldReconnect) {
-          initDirectBaileysSession(merchantId, instanceName)
-        } else {
-          delete activeSockets[instanceName]
-          delete qrCodesMemory[instanceName]
           await db.execute(
             sql`UPDATE merchants 
-                SET whatsapp_status = 'disconnected', 
-                    whatsapp_qr_code = NULL, 
-                    whatsapp_phone = NULL, 
+                SET whatsapp_status = 'connecting', 
+                    whatsapp_qr_code = ${qrDataUrl}, 
                     updated_at = NOW() 
                 WHERE id = ${merchantId}`
           )
         }
-      }
-    })
 
-    // Listen for incoming buyer messages
-    sock.ev.on('messages.upsert', async (m) => {
-      if (m.type === 'notify') {
-        for (const msg of m.messages) {
-          if (!msg.key.fromMe && msg.message) {
-            const remoteJid = msg.key.remoteJid || ''
-            const senderPhone = remoteJid.replace('@s.whatsapp.net', '').replace('@c.us', '').replace(/[^0-9]/g, '')
+        if (connection === 'open') {
+          const phone = sock.user?.id ? sock.user.id.split(':')[0] : null
+          delete qrCodesMemory[instanceName]
 
-            const userText = msg.message.conversation ||
-                             msg.message.extendedTextMessage?.text ||
-                             ''
+          await db.execute(
+            sql`UPDATE merchants 
+                SET whatsapp_status = 'open', 
+                    whatsapp_phone = ${phone}, 
+                    whatsapp_qr_code = NULL, 
+                    updated_at = NOW() 
+                WHERE id = ${merchantId}`
+          )
+        }
 
-            if (senderPhone && userText.trim()) {
-              const guestSessionId = `wa_${senderPhone}`
-              const convId = await getOrCreateConversation(merchantId, null, guestSessionId)
-
-              if (convId) {
-                await saveChatMessage(convId, 'buyer', userText)
-
-                const botRes = await queryChatbot(userText, merchantId, 'ar', convId)
-                const replyText = botRes.response?.text || 'عذراً، فشل معالجة الطلب حالياً.'
-                const isConfident = botRes.response?.confident !== false
-
-                await saveChatMessage(convId, 'bot', replyText, isConfident)
-
-                // Send reply back to buyer on WhatsApp
-                await sock.sendMessage(remoteJid, { text: replyText })
-              }
-            }
+        if (connection === 'close') {
+          const shouldReconnect = (lastDisconnect?.error as any)?.output?.statusCode !== DisconnectReason.loggedOut
+          if (shouldReconnect) {
+            initDirectBaileysSession(merchantId, instanceName)
+          } else {
+            delete activeSockets[instanceName]
+            delete qrCodesMemory[instanceName]
+            await db.execute(
+              sql`UPDATE merchants 
+                  SET whatsapp_status = 'disconnected', 
+                      whatsapp_qr_code = NULL, 
+                      whatsapp_phone = NULL, 
+                      updated_at = NOW() 
+                  WHERE id = ${merchantId}`
+            )
           }
         }
-      }
+      })
     })
 
-    return { success: true }
+    const initialQr = await qrPromise
+    return { success: true, qrCode: initialQr }
   } catch (error: any) {
     console.error('initDirectBaileysSession error:', error)
     return { success: false, error: error.message }
