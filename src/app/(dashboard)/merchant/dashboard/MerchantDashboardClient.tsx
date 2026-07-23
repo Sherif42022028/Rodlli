@@ -68,8 +68,13 @@ export default function MerchantDashboardClient({
         setActiveTab('sheets')
         setSuccessMsg(language === 'en' ? 'Google Sheets account connected successfully! Now paste your sheet link below.' : 'تم ربط حساب Google Sheets بنجاح! يمكنك الآن لصق رابط الشيت بالأسفل.')
       }
-      if (params.get('error')) {
-        setErrorMsg(language === 'en' ? 'Failed to connect Google Sheets. Please try again.' : 'فشل الربط بـ Google Sheets. يرجى إعادة المحاولة.')
+      const errParam = params.get('error')
+      if (errParam) {
+        if (errParam === 'missing_credentials') {
+          setErrorMsg(language === 'en' ? 'Google Client ID / Secret is missing in environment variables.' : 'بيانات تطبيق Google (Client ID / Secret) غير متوفرة في إعدادات البيئة على السيرفر.')
+        } else {
+          setErrorMsg(language === 'en' ? 'Failed to connect Google Sheets. Please try again.' : 'فشل الربط بـ Google Sheets. يرجى إعادة المحاولة.')
+        }
       }
     }
   }, [language])

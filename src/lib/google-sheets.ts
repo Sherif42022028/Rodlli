@@ -28,10 +28,18 @@ export function extractSpreadsheetId(urlOrId: string): string | null {
   return null
 }
 
+export function hasGoogleCredentials(): boolean {
+  return Boolean(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET)
+}
+
 /**
  * Builds Google OAuth 2.0 Auth URL for merchant agreement.
  */
 export function getGoogleAuthUrl(stateParam: string, customRedirectUri?: string): string {
+  if (!GOOGLE_CLIENT_ID) {
+    throw new Error('Missing GOOGLE_CLIENT_ID environment variable')
+  }
+
   const redirectUri = customRedirectUri || GOOGLE_REDIRECT_URI
   const params = new URLSearchParams({
     client_id: GOOGLE_CLIENT_ID,

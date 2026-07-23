@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { getMerchantByProfileId } from '@/app/actions/merchant'
-import { getGoogleAuthUrl } from '@/lib/google-sheets'
+import { getGoogleAuthUrl, hasGoogleCredentials } from '@/lib/google-sheets'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,6 +19,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(new URL('/merchant/dashboard', request.url))
     }
 
+    if (!hasGoogleCredentials()) {
+      return NextResponse.redirect(new URL('/merchant/dashboard?tab=sheets&error=missing_credentials', request.url))
+    }
+
     const { searchParams } = new URL(request.url)
     const redirectTo = searchParams.get('redirect_to') || 'dashboard'
 
@@ -33,6 +37,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(authUrl)
   } catch (error: any) {
     console.error('Google Sheets Connect Route Error:', error)
-    return NextResponse.redirect(new URL('/merchant/dashboard?error=connect_failed', request.url))
+    return NextResponse.redirect(new URL('/merchant/dashboard?tab=sheets&error=connect_failed', request.url))
   }
 }
