@@ -192,9 +192,42 @@ export class ChatbotEngine {
     conversationId?: string | null
   ): Promise<ChatbotResponse> {
     const lowerMsg = userMessage.toLowerCase().trim()
-    const isContactMsg = this.matchesKeywords(lowerMsg, ['contact', 'support', 'phone', 'whatsapp', 'call', 'تواصل', 'دعم', 'اتصال', 'تلفون', 'هاتف', 'رقم'])
+
+    // Check if query is explicitly an order tracking query (e.g. "رقم الاوردر", "رقم الطلب", "order status #102")
+    const isOrderSpecific = lowerMsg.includes('أوردر') || lowerMsg.includes('طلب') || lowerMsg.includes('order') || lowerMsg.includes('#')
+
+    // Detect ANY phone number or contact-related question regardless of phrasing
+    const isContactMsg = !isOrderSpecific && (
+      this.matchesKeywords(lowerMsg, [
+        'contact', 'support', 'phone', 'mobile', 'whatsapp', 'wa', 'call', 'reach', 'number', 'telephone',
+        'تواصل', 'دعم', 'اتصال', 'تلفون', 'تليفون', 'هاتف', 'موبايل', 'رقم', 'واتس', 'واتساب', 'كلمكم', 'اتكلم', 'نكلمكم', 'رقمكم', 'خدمة العملاء'
+      ]) || /(?:رقم|تلفون|تليفون|هاتف|موبايل|واتس|واتساب|تواصل|اتصال|دعم|phone|mobile|whatsapp|number|call)/i.test(lowerMsg)
+    )
+
     if (isContactMsg) {
       await this.logContactRequest(conversationId)
+      const waContact = await this.getMerchantWhatsAppContact(userMessage)
+
+      if (waContact.whatsappPhone || waContact.whatsappUrl) {
+        return {
+          text: language === 'en'
+            ? `Here is our direct store contact number:\n📞 *${waContact.whatsappPhone || ''}*\n\nYou can click the button below or scan the QR code to open a direct WhatsApp chat!`
+            : `إليك رقم تواصل متجرنا المباشر:\n📞 *${waContact.whatsappPhone || ''}*\n\nيمكنك الضغط على الزر أدناه أو مسح كود الـ QR لبدء محادثة مباشرة عبر الواتساب!`,
+          type: 'text',
+          confident: true,
+          whatsappPhone: waContact.whatsappPhone,
+          whatsappUrl: waContact.whatsappUrl,
+          whatsappQrUrl: waContact.whatsappQrUrl,
+          quickReplies: [
+            ...(waContact.whatsappUrl ? [{
+              text: '💬 تحدث مع التاجر على الواتساب',
+              textAr: '💬 تحدث مع التاجر على الواتساب',
+              action: 'open_url',
+              payload: waContact.whatsappUrl
+            }] : [])
+          ]
+        }
+      }
     }
 
     // Layer 1: Deterministic / Rule-Based Engine First
