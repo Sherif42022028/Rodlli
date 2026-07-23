@@ -135,7 +135,7 @@ export default function BuyerDashboardClient({
                   <div className="flex items-start gap-3.5">
                     <div className="w-12 h-12 rounded-xl bg-cream-50 overflow-hidden flex items-center justify-center shrink-0 border border-dark-100">
                       {s.bot_avatar_url ? (
-                        <img src={s.bot_avatar_url} alt={s.business_name} className="w-full h-full object-cover" />
+                        <img src={s.bot_avatar_url} alt={s.business_name} className="w-full h-full object-contain p-0.5 bg-white" />
                       ) : (
                         <Bot className="w-6 h-6 text-dark-500" />
                       )}
@@ -191,7 +191,7 @@ export default function BuyerDashboardClient({
                   >
                     <div className="w-10 h-10 rounded-lg overflow-hidden bg-cream-50 flex items-center justify-center shrink-0 border border-dark-100">
                       {s.bot_avatar_url ? (
-                        <img src={s.bot_avatar_url} alt={s.business_name} className="w-full h-full object-cover" />
+                        <img src={s.bot_avatar_url} alt={s.business_name} className="w-full h-full object-contain p-0.5 bg-white" />
                       ) : (
                         <Bot className="w-5 h-5 text-dark-500" />
                       )}
@@ -230,7 +230,7 @@ export default function BuyerDashboardClient({
                 >
                   <div className="w-10 h-10 rounded-lg overflow-hidden bg-cream-50 flex items-center justify-center shrink-0 border border-dark-100">
                     {s.bot_avatar_url ? (
-                      <img src={s.bot_avatar_url} alt={s.business_name} className="w-full h-full object-cover" />
+                      <img src={s.bot_avatar_url} alt={s.business_name} className="w-full h-full object-contain p-0.5 bg-white" />
                     ) : (
                       <Bot className="w-5 h-5 text-dark-500" />
                     )}

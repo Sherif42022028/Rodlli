@@ -1051,7 +1051,7 @@ export default function MerchantDashboardClient({
                   <span className="text-xs text-dark-500 font-bold block mb-0.5">Bot Icon</span>
                   {merchant.bot_avatar_url ? (
                     <div className="flex items-center gap-2 mt-1">
-                      <img src={merchant.bot_avatar_url} alt="Bot Icon" className="w-8 h-8 rounded-lg object-cover border border-dark-100 shadow-sm" />
+                      <img src={merchant.bot_avatar_url} alt="Bot Icon" className="w-8 h-8 rounded-lg object-contain p-0.5 bg-white border border-dark-100 shadow-sm" />
                       <span className="text-xs text-dark-600 truncate max-w-[150px]">{merchant.bot_avatar_url}</span>
                     </div>
                   ) : (

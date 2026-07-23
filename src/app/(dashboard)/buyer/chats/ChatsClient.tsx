@@ -50,7 +50,7 @@ export default function ChatsClient({
               {/* Logo / Avatar */}
               <div className="w-12 h-12 rounded-xl bg-cream-100 border border-dark-100 flex items-center justify-center overflow-hidden shrink-0 shadow-sm">
                 {c.bot_avatar_url ? (
-                  <img src={c.bot_avatar_url} alt={c.business_name} className="w-full h-full object-cover" />
+                  <img src={c.bot_avatar_url} alt={c.business_name} className="w-full h-full object-contain p-0.5 bg-white" />
                 ) : (
                   <Bot className="w-6 h-6 text-dark-400" />
                 )}

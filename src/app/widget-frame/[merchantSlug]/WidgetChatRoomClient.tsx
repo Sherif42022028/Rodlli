@@ -167,7 +167,7 @@ export default function WidgetChatRoomClient({
         <div className="flex items-center gap-2.5">
           <div className="w-9 h-9 rounded-lg overflow-hidden border border-dark-100 bg-cream-100 flex items-center justify-center shrink-0">
             {merchant.bot_avatar_url ? (
-              <img src={merchant.bot_avatar_url} alt="Bot Avatar" className="w-full h-full object-cover" />
+              <img src={merchant.bot_avatar_url} alt="Bot Avatar" className="w-full h-full object-contain p-0.5 bg-white" />
             ) : (
               <Bot className="w-5 h-5 text-dark-500" />
             )}
@@ -217,7 +217,7 @@ export default function WidgetChatRoomClient({
               {m.sender === 'user' ? (
                 <span className="text-[8px] font-bold">ME</span>
               ) : merchant.bot_avatar_url ? (
-                <img src={merchant.bot_avatar_url} alt="Bot Avatar" className="w-full h-full object-cover" />
+                <img src={merchant.bot_avatar_url} alt="Bot Avatar" className="w-full h-full object-contain p-0.5 bg-white" />
               ) : (
                 <Bot className="w-4 h-4" />
               )}

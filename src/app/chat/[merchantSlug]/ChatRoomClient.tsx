@@ -170,7 +170,7 @@ export default function ChatRoomClient({
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl overflow-hidden bg-primary-500 flex items-center justify-center text-white shadow-md">
             {merchant.bot_avatar_url ? (
-              <img src={merchant.bot_avatar_url} alt={merchant.business_name} className="w-full h-full object-cover" />
+              <img src={merchant.bot_avatar_url} alt={merchant.business_name} className="w-full h-full object-contain p-0.5 bg-white" />
             ) : (
               <Bot className="w-6 h-6" />
             )}
@@ -351,7 +351,7 @@ export default function ChatRoomClient({
                     >
                       <div className="w-7 h-7 rounded overflow-hidden bg-cream-100 border border-dark-100 flex items-center justify-center shrink-0">
                         {ts.bot_avatar_url ? (
-                          <img src={ts.bot_avatar_url} alt={ts.business_name} className="w-full h-full object-cover" />
+                          <img src={ts.bot_avatar_url} alt={ts.business_name} className="w-full h-full object-contain p-0.5 bg-white" />
                         ) : (
                           <Bot className="w-4 h-4 text-dark-400" />
                         )}
@@ -384,7 +384,7 @@ export default function ChatRoomClient({
                   {m.sender === 'user' ? (
                     'ME'
                   ) : merchant.bot_avatar_url ? (
-                    <img src={merchant.bot_avatar_url} alt="Bot Avatar" className="w-full h-full object-cover" />
+                    <img src={merchant.bot_avatar_url} alt="Bot Avatar" className="w-full h-full object-contain p-0.5 bg-white" />
                   ) : (
                     <Bot className="w-5 h-5" />
                   )}
@@ -498,7 +498,7 @@ export default function ChatRoomClient({
               <div className="flex gap-3 text-sm mr-auto items-center">
                 <div className="w-8 h-8 rounded-lg overflow-hidden bg-primary-500 text-white flex items-center justify-center shadow-sm">
                   {merchant.bot_avatar_url ? (
-                    <img src={merchant.bot_avatar_url} alt="Bot Avatar" className="w-full h-full object-cover" />
+                    <img src={merchant.bot_avatar_url} alt="Bot Avatar" className="w-full h-full object-contain p-0.5 bg-white" />
                   ) : (
                     <Bot className="w-5 h-5" />
                   )}
