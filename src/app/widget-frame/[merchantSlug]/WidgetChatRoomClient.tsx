@@ -19,6 +19,9 @@ interface Message {
     payload?: any
   }>
   data?: any
+  whatsappPhone?: string | null
+  whatsappUrl?: string | null
+  whatsappQrUrl?: string | null
 }
 
 export default function WidgetChatRoomClient({
@@ -117,7 +120,11 @@ export default function WidgetChatRoomClient({
         sender: 'bot',
         text: res.response.text,
         type: res.response.type,
-        data: res.response.data
+        data: res.response.data,
+        quickReplies: res.response.quickReplies,
+        whatsappPhone: res.response.whatsappPhone,
+        whatsappUrl: res.response.whatsappUrl,
+        whatsappQrUrl: res.response.whatsappQrUrl,
       }
       setMessages((prev) => [...prev, botMsg])
       const isConfident = res.response.confident !== false
@@ -133,7 +140,11 @@ export default function WidgetChatRoomClient({
     }
   }
 
-  const handleQuickReply = async (action: string, text: string) => {
+  const handleQuickReply = async (action: string, text: string, payload?: any) => {
+    if (action === 'open_url' && payload) {
+      window.open(payload, '_blank')
+      return
+    }
     if (action === 'contact_support' && conversationId) {
       await createContactRequest(merchant.id, conversationId)
     }
@@ -272,6 +283,41 @@ export default function WidgetChatRoomClient({
                     ))}
                   </div>
                 )}
+                {/* Bot WhatsApp Fallback Contact Card */}
+                {m.sender === 'bot' && (m.whatsappUrl || m.whatsappQrUrl) && (
+                  <div className="mt-2.5 bg-emerald-50/80 border border-emerald-200 p-3 rounded-xl space-y-2 text-emerald-950 text-left">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[11px] font-bold">
+                        {language === 'en' ? 'Connect directly on WhatsApp' : 'التواصل المباشر عبر الواتساب'}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-emerald-800 leading-relaxed">
+                      {language === 'en' 
+                        ? 'Click the button below or scan the QR code to chat with the store team directly.' 
+                        : 'يمكنك المحادثة مباشرة مع فريق متجرنا عبر الواتساب بالضغط على الزر أو مسح الكود بالموبايل:'}
+                    </p>
+                    <div className="flex flex-col items-center gap-2 pt-1">
+                      {m.whatsappUrl && (
+                        <a
+                          href={m.whatsappUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-bold transition-all shadow-xs"
+                        >
+                          {language === 'en' ? 'Open WhatsApp Chat 💬' : 'فتح محادثة الواتساب 💬'}
+                        </a>
+                      )}
+                      {m.whatsappQrUrl && (
+                        <div className="bg-white border border-emerald-200 p-1 rounded-lg shadow-xs text-center shrink-0">
+                          <img src={m.whatsappQrUrl} alt="WhatsApp QR Code" className="w-16 h-16 object-contain mx-auto" />
+                          <span className="text-[8px] text-dark-500 font-semibold block mt-0.5">
+                            {language === 'en' ? 'Scan with Phone' : 'امسح بالموبايل'}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Bot Quick Replies */}
@@ -280,7 +326,7 @@ export default function WidgetChatRoomClient({
                   {m.quickReplies.map((qr, idx) => (
                     <button
                       key={idx}
-                      onClick={() => handleQuickReply(qr.action, language === 'en' ? qr.text : (qr.textAr || qr.text))}
+                      onClick={() => handleQuickReply(qr.action, language === 'en' ? qr.text : (qr.textAr || qr.text), qr.payload)}
                       className="px-2.5 py-1 rounded-full border border-primary-200 hover:border-primary-300 hover:bg-primary-50 text-[10px] font-semibold text-primary-600 transition-all text-left"
                     >
                       {language === 'en' ? qr.text : (qr.textAr || qr.text)}

@@ -22,6 +22,9 @@ interface Message {
     payload?: any
   }>
   data?: any
+  whatsappPhone?: string | null
+  whatsappUrl?: string | null
+  whatsappQrUrl?: string | null
 }
 
 export default function ChatRoomClient({
@@ -127,7 +130,11 @@ export default function ChatRoomClient({
         sender: 'bot',
         text: res.response.text,
         type: res.response.type,
-        data: res.response.data
+        data: res.response.data,
+        quickReplies: res.response.quickReplies,
+        whatsappPhone: res.response.whatsappPhone,
+        whatsappUrl: res.response.whatsappUrl,
+        whatsappQrUrl: res.response.whatsappQrUrl,
       }
       setMessages((prev) => [...prev, botMsg])
       // Save bot reply to database with confidence flag
@@ -145,7 +152,11 @@ export default function ChatRoomClient({
   }
 
   // Handle Quick Reply button click
-  const handleQuickReply = async (action: string, text: string) => {
+  const handleQuickReply = async (action: string, text: string, payload?: any) => {
+    if (action === 'open_url' && payload) {
+      window.open(payload, '_blank')
+      return
+    }
     if (action === 'contact_support' && conversationId) {
       await createContactRequest(merchant.id, conversationId)
     }
@@ -439,6 +450,44 @@ export default function ChatRoomClient({
                         ))}
                       </div>
                     )}
+
+                    {/* Bot WhatsApp Fallback Contact Card */}
+                    {m.sender === 'bot' && (m.whatsappUrl || m.whatsappQrUrl) && (
+                      <div className="mt-3 bg-emerald-50/80 border border-emerald-200 p-3.5 rounded-xl space-y-3 text-emerald-950 text-left">
+                        <div className="flex items-center gap-2">
+                          <MessageSquare className="w-4 h-4 text-emerald-600 shrink-0" />
+                          <span className="text-xs font-bold">
+                            {language === 'en' ? 'Connect directly on WhatsApp' : 'التواصل المباشر عبر الواتساب'}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-emerald-800 leading-relaxed">
+                          {language === 'en' 
+                            ? 'Click the button below or scan the QR code to chat with the store team directly.' 
+                            : 'يمكنك المحادثة مباشرة مع فريق متجرنا عبر الواتساب بالضغط على الزر أو مسح الكود بالموبايل:'}
+                        </p>
+                        <div className="flex flex-col sm:flex-row items-center gap-3 pt-1">
+                          {m.whatsappUrl && (
+                            <a
+                              href={m.whatsappUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm"
+                            >
+                              <MessageSquare className="w-4 h-4" />
+                              {language === 'en' ? 'Open WhatsApp Chat 💬' : 'فتح محادثة الواتساب 💬'}
+                            </a>
+                          )}
+                          {m.whatsappQrUrl && (
+                            <div className="bg-white border border-emerald-200 p-1.5 rounded-xl shadow-xs text-center shrink-0">
+                              <img src={m.whatsappQrUrl} alt="WhatsApp QR Code" className="w-20 h-20 object-contain mx-auto" />
+                              <span className="text-[9px] text-dark-500 font-semibold block mt-0.5">
+                                {language === 'en' ? 'Scan with Phone' : 'امسح بالموبايل'}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -473,8 +522,8 @@ export default function ChatRoomClient({
                 {messages[messages.length - 1].quickReplies?.map((qr, idx) => (
                   <button
                     key={idx}
-                    onClick={() => handleQuickReply(qr.action, language === 'en' ? qr.text : (qr.textAr || qr.text))}
-                    className="px-3.5 py-1.5 rounded-full border border-primary-200 bg-primary-50 hover:bg-primary-100 text-primary-700 text-xs font-bold transition-colors shadow-sm"
+                    onClick={() => handleQuickReply(qr.action, language === 'en' ? qr.text : (qr.textAr || qr.text), qr.payload)}
+                    className="px-3.5 py-1.5 rounded-full border border-primary-200 bg-primary-50 hover:bg-primary-100 text-primary-700 text-xs font-bold transition-colors shadow-sm flex items-center gap-1"
                   >
                     {language === 'en' ? qr.text : (qr.textAr || qr.text)}
                   </button>

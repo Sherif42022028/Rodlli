@@ -7,6 +7,16 @@ import { z } from 'zod'
 import { searchProducts, getProductDetails, getFAQAnswer, checkWorkingHours, checkOrderStatus } from './tools'
 import { searchOramaHybrid } from '@/lib/orama/engine'
 
+export function formatWhatsAppPhone(phone: string): string {
+  if (!phone) return ''
+  let cleaned = phone.replace(/[^0-9]/g, '')
+  // Egypt numbers starting with 01 (e.g. 01012345678 -> 201012345678)
+  if (cleaned.startsWith('01') && cleaned.length === 11) {
+    cleaned = '2' + cleaned
+  }
+  return cleaned
+}
+
 interface QuickReply {
   text: string
   textAr?: string
@@ -20,6 +30,9 @@ interface ChatbotResponse {
   quickReplies?: QuickReply[]
   data?: any
   confident?: boolean
+  whatsappPhone?: string | null
+  whatsappUrl?: string | null
+  whatsappQrUrl?: string | null
 }
 
 export class ChatbotEngine {
@@ -83,6 +96,32 @@ export class ChatbotEngine {
       return rows && rows.length > 0 ? rows[0].business_name : 'Rodlli Merchant'
     } catch {
       return 'Rodlli Merchant'
+    }
+  }
+
+  public async getMerchantWhatsAppContact(userQuery: string): Promise<{ whatsappPhone: string | null; whatsappUrl: string | null; whatsappQrUrl: string | null }> {
+    try {
+      const result = await db.execute(
+        sql`SELECT business_phone FROM merchants WHERE id = ${this.merchantId} LIMIT 1`
+      )
+      const rows = result.rows as unknown as any[]
+      const rawPhone = rows && rows.length > 0 ? rows[0].business_phone : null
+      if (!rawPhone) return { whatsappPhone: null, whatsappUrl: null, whatsappQrUrl: null }
+
+      const cleanedPhone = formatWhatsAppPhone(rawPhone)
+      if (!cleanedPhone) return { whatsappPhone: null, whatsappUrl: null, whatsappQrUrl: null }
+
+      const prefilledText = encodeURIComponent(`مرحباً، أحتاج مساعدة بشأن استفساري: "${userQuery}"`)
+      const whatsappUrl = `https://wa.me/${cleanedPhone}?text=${prefilledText}`
+      const whatsappQrUrl = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(whatsappUrl)}&size=200x200&margin=1`
+
+      return {
+        whatsappPhone: cleanedPhone,
+        whatsappUrl,
+        whatsappQrUrl
+      }
+    } catch {
+      return { whatsappPhone: null, whatsappUrl: null, whatsappQrUrl: null }
     }
   }
 
@@ -182,6 +221,8 @@ export class ChatbotEngine {
     }
 
     // Layer 2: AI Layer (Zhipu GLM / Gemini Function Calling)
+    let fallbackResponse: ChatbotResponse = localResult
+
     const zhipuApiKey = process.env.ZHIPU_API_KEY
     if (zhipuApiKey) {
       try {
@@ -189,8 +230,7 @@ export class ChatbotEngine {
         if (aiResult.confident) {
           return aiResult
         }
-        // If AI executed but was not confident, return the AI fallback response (already logged to unanswered_questions)
-        return aiResult
+        fallbackResponse = aiResult
       } catch (error) {
         console.error('Zhipu AI processing failed, falling back to Gemini/local engine:', error)
       }
@@ -203,16 +243,32 @@ export class ChatbotEngine {
         if (aiResult.confident) {
           return aiResult
         }
-        // If AI executed but was not confident, return the AI fallback response (already logged to unanswered_questions)
-        return aiResult
+        fallbackResponse = aiResult
       } catch (error) {
         console.error('Gemini processing failed, falling back to local engine:', error)
       }
     }
 
-    // Layer 3: Pure Local Fallback when no AI provider key is configured or AI execution failed
+    // Layer 3: Fallback handling when AI/Local engine is not confident
     await this.logUnansweredQuestion(userMessage, conversationId)
-    return localResult
+
+    // Attach WhatsApp Merchant Contact Details (Phone, direct wa.me link with prefilled text, and QR code)
+    const waContact = await this.getMerchantWhatsAppContact(userMessage)
+    return {
+      ...fallbackResponse,
+      whatsappPhone: waContact.whatsappPhone,
+      whatsappUrl: waContact.whatsappUrl,
+      whatsappQrUrl: waContact.whatsappQrUrl,
+      quickReplies: [
+        ...(fallbackResponse.quickReplies || []),
+        ...(waContact.whatsappUrl ? [{
+          text: '💬 تحدث مع التاجر على الواتساب',
+          textAr: '💬 تحدث مع التاجر على الواتساب',
+          action: 'open_url',
+          payload: waContact.whatsappUrl
+        }] : [])
+      ]
+    }
   }
 
   private getVercelAITools(conversationId?: string | null) {
