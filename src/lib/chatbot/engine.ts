@@ -5,6 +5,7 @@ import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { z } from 'zod'
 import { searchProducts, getProductDetails, getFAQAnswer, checkWorkingHours, checkOrderStatus } from './tools'
+import { searchOramaHybrid } from '@/lib/orama/engine'
 
 interface QuickReply {
   text: string
@@ -162,6 +163,22 @@ export class ChatbotEngine {
     const localResult = await this.processMessageLocal(userMessage, language, conversationId)
     if (localResult.confident) {
       return localResult
+    }
+
+    // Layer 1.5: Orama Hybrid Search Engine (Fast & High Accuracy Semantic/Text Match)
+    try {
+      const oramaRes = await searchOramaHybrid(this.merchantId, userMessage)
+      if (oramaRes) {
+        await this.logToolCall(`orama_${oramaRes.type}`, { query: userMessage, confidence: oramaRes.confidence }, conversationId)
+        return {
+          text: oramaRes.replyText,
+          type: oramaRes.type === 'product' ? 'products' : 'faq',
+          confident: true,
+          data: oramaRes.matchedItem,
+        }
+      }
+    } catch (e) {
+      console.error('Orama Hybrid Search error in engine:', e)
     }
 
     // Layer 2: AI Layer (Zhipu GLM / Gemini Function Calling)

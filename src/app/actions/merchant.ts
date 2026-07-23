@@ -3,6 +3,7 @@
 import { db } from '@/lib/db'
 import { sql } from 'drizzle-orm'
 import { extractSpreadsheetId, syncMerchantSheet, syncMerchantOrders } from '@/lib/google-sheets'
+import { invalidateMerchantOramaIndex } from '@/lib/orama/engine'
 
 // 1. Get Merchant profile
 export async function getMerchantByProfileId(profileId: string) {
@@ -109,6 +110,7 @@ export async function addProduct(data: Record<string, any>, merchantId: string) 
       sql`INSERT INTO products (merchant_id, name, price, description, image_urls)
           VALUES (${merchantId}, ${name}, ${price}, ${description || null}, ${arrayLiteral})`
     )
+    invalidateMerchantOramaIndex(merchantId)
     return { success: true }
   } catch (error: any) {
     console.error('addProduct error:', error)
@@ -138,6 +140,7 @@ export async function deleteProductsBulk(productIds: string[], merchantId: strin
         sql`DELETE FROM products WHERE id = ${pId} AND merchant_id = ${merchantId}`
       )
     }
+    invalidateMerchantOramaIndex(merchantId)
     return { success: true, count: productIds.length }
   } catch (error: any) {
     console.error('deleteProductsBulk error:', error)
@@ -150,6 +153,7 @@ export async function deleteAllMerchantProducts(merchantId: string) {
     await db.execute(
       sql`DELETE FROM products WHERE merchant_id = ${merchantId}`
     )
+    invalidateMerchantOramaIndex(merchantId)
     return { success: true }
   } catch (error: any) {
     console.error('deleteAllMerchantProducts error:', error)
@@ -182,6 +186,7 @@ export async function addFAQ(data: Record<string, any>, merchantId: string) {
       sql`INSERT INTO faqs (merchant_id, question, answer, order_index)
           VALUES (${merchantId}, ${question}, ${answer}, ${orderIndex || 0})`
     )
+    invalidateMerchantOramaIndex(merchantId)
     return { success: true }
   } catch (error: any) {
     console.error('addFAQ error:', error)

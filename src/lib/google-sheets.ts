@@ -2,6 +2,7 @@ import { db } from '@/lib/db'
 import { sql } from 'drizzle-orm'
 import { decryptToken } from '@/lib/encryption'
 import { getCategoryTemplate } from '@/lib/constants/category-templates'
+import { invalidateMerchantOramaIndex } from '@/lib/orama/engine'
 
 const GOOGLE_CLIENT_ID = (process.env.GOOGLE_CLIENT_ID || process.env.GOOGLE_SHEETS_CLIENT_ID || '').trim()
 const GOOGLE_CLIENT_SECRET = (process.env.GOOGLE_CLIENT_SECRET || process.env.GOOGLE_SHEETS_CLIENT_SECRET || '').trim()
@@ -391,6 +392,9 @@ export async function syncMerchantSheet(merchantId: string) {
               updated_at = NOW() 
           WHERE id = ${merchantId}`
     )
+
+    // Invalidate Orama index to rebuild fresh with updated sheet products
+    invalidateMerchantOramaIndex(merchantId)
 
     return { success: true, count: validProductsToSync.length }
   } catch (error: any) {
