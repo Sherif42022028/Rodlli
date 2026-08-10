@@ -384,7 +384,14 @@ export default function ChatRoomClient({
                   {m.sender === 'user' ? (
                     'ME'
                   ) : merchant.bot_avatar_url ? (
-                    <img src={merchant.bot_avatar_url} alt="Bot Avatar" className="w-full h-full object-contain p-0.5 bg-white" />
+                    <img 
+                      src={merchant.bot_avatar_url} 
+                      alt="Bot Avatar" 
+                      className="w-full h-full object-contain p-0.5 bg-white" 
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none';
+                      }}
+                    />
                   ) : (
                     <Bot className="w-5 h-5" />
                   )}

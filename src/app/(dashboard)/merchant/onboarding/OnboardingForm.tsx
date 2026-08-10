@@ -21,20 +21,64 @@ export default function OnboardingForm({ profileId }: { profileId: string }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const handleAvatarFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const compressAndResizeImage = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image()
+      img.src = URL.createObjectURL(file)
+      img.onload = () => {
+        URL.revokeObjectURL(img.src)
+        const canvas = document.createElement('canvas')
+        const maxWidth = 256
+        const maxHeight = 256
+        let width = img.width
+        let height = img.height
+
+        if (width > height) {
+          if (width > maxWidth) {
+            height = Math.round((height * maxWidth) / width)
+            width = maxWidth
+          }
+        } else {
+          if (height > maxHeight) {
+            width = Math.round((width * maxHeight) / height)
+            height = maxHeight
+          }
+        }
+
+        canvas.width = width
+        canvas.height = height
+        const ctx = canvas.getContext('2d')
+        if (!ctx) {
+          reject(new Error('Canvas context error'))
+          return
+        }
+        ctx.drawImage(img, 0, 0, width, height)
+        resolve(canvas.toDataURL('image/png', 0.9))
+      }
+      img.onerror = (err) => reject(err)
+    })
+  }
+
+  const handleAvatarFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        alert(language === 'en' ? 'Image size must be less than 5MB' : 'حجم الصورة يجب أن يكون أقل من 5 ميجابايت')
+      if (file.size > 10 * 1024 * 1024) {
+        alert(language === 'en' ? 'Image size must be less than 10MB' : 'حجم الصورة يجب أن يكون أقل من 10 ميجابايت')
         return
       }
-      const reader = new FileReader()
-      reader.onload = (event) => {
-        if (event.target?.result) {
-          setBotAvatarUrl(event.target.result as string)
+      try {
+        const compressedBase64 = await compressAndResizeImage(file)
+        setBotAvatarUrl(compressedBase64)
+      } catch (err) {
+        console.error('Image compression error:', err)
+        const reader = new FileReader()
+        reader.onload = (event) => {
+          if (event.target?.result) {
+            setBotAvatarUrl(event.target.result as string)
+          }
         }
+        reader.readAsDataURL(file)
       }
-      reader.readAsDataURL(file)
     }
   }
 

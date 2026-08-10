@@ -217,7 +217,14 @@ export default function WidgetChatRoomClient({
               {m.sender === 'user' ? (
                 <span className="text-[8px] font-bold">ME</span>
               ) : merchant.bot_avatar_url ? (
-                <img src={merchant.bot_avatar_url} alt="Bot Avatar" className="w-full h-full object-contain p-0.5 bg-white" />
+                <img 
+                  src={merchant.bot_avatar_url} 
+                  alt="Bot Avatar" 
+                  className="w-full h-full object-contain p-0.5 bg-white" 
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                  }}
+                />
               ) : (
                 <Bot className="w-4 h-4" />
               )}
