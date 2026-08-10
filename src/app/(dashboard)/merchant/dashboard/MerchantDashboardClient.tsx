@@ -9,7 +9,8 @@ import { getContrastTextColor } from '@/lib/colors'
 import { 
   Store, ShoppingBag, HelpCircle, Clock, Link2, Copy, ExternalLink, 
   Trash2, Plus, Edit2, Check, AlertCircle, RefreshCw, MessageSquareWarning,
-  BarChart3, TrendingUp, MessageSquare, Percent, FileSpreadsheet, PackageCheck, Truck, Palette, RotateCcw
+  BarChart3, TrendingUp, MessageSquare, Percent, FileSpreadsheet, PackageCheck, Truck, Palette, RotateCcw,
+  Upload, Bot
 } from 'lucide-react'
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts'
 
@@ -103,6 +104,23 @@ export default function MerchantDashboardClient({
   const [businessPhone, setBusinessPhone] = useState(merchant.business_phone || '')
   const [websiteUrl, setWebsiteUrl] = useState(merchant.website_url || '')
   const [botAvatarUrl, setBotAvatarUrl] = useState(merchant.bot_avatar_url || '')
+
+  const handleAvatarFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        alert(language === 'en' ? 'Image size must be less than 5MB' : 'حجم الصورة يجب أن يكون أقل من 5 ميجابايت')
+        return
+      }
+      const reader = new FileReader()
+      reader.onload = (event) => {
+        if (event.target?.result) {
+          setBotAvatarUrl(event.target.result as string)
+        }
+      }
+      reader.readAsDataURL(file)
+    }
+  }
 
   // 2. Add Product & Bulk Selection State
   const [showAddProduct, setShowAddProduct] = useState(false)
@@ -977,14 +995,46 @@ export default function MerchantDashboardClient({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-dark-700 mb-1">Bot Icon Image URL (رابط صورة أيقونة البوت)</label>
-                  <input
-                    type="url"
-                    value={botAvatarUrl}
-                    onChange={(e) => setBotAvatarUrl(e.target.value)}
-                    className="w-full px-3 py-2 border border-dark-200 rounded-xl text-sm"
-                    placeholder="https://example.com/bot-avatar.png"
-                  />
+                  <label className="block text-xs font-bold text-dark-700 mb-1">
+                    {language === 'en' ? 'Store Logo / Bot Avatar (شعار العلامة التجارية / أيقونة البوت)' : 'شعار العلامة التجارية / أيقونة البوت'}
+                  </label>
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 bg-cream-50/50 p-4 border border-dark-200 rounded-2xl">
+                    <div className="w-16 h-16 rounded-2xl bg-white border border-dark-200 overflow-hidden shrink-0 flex items-center justify-center shadow-sm">
+                      {botAvatarUrl ? (
+                        <img src={botAvatarUrl} alt="Store Logo" className="w-full h-full object-contain p-1" />
+                      ) : (
+                        <Bot className="w-8 h-8 text-dark-400" />
+                      )}
+                    </div>
+                    <div className="space-y-2 flex-1 w-full">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <label className="cursor-pointer px-4 py-2 bg-dark-900 hover:bg-dark-800 text-white text-xs font-bold rounded-xl shadow-sm transition-all flex items-center gap-2">
+                          <Upload className="w-4 h-4 text-primary-400" />
+                          {language === 'en' ? 'Upload Logo File' : 'رفع صورة الشعار'}
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handleAvatarFileChange}
+                            className="hidden"
+                          />
+                        </label>
+                        {botAvatarUrl && (
+                          <button
+                            type="button"
+                            onClick={() => setBotAvatarUrl('')}
+                            className="px-3 py-2 text-xs font-bold text-red-600 hover:bg-red-50 border border-red-200 rounded-xl transition-all"
+                          >
+                            {language === 'en' ? 'Remove' : 'حذف'}
+                          </button>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-dark-500">
+                        {language === 'en'
+                          ? 'Upload PNG, JPG, or WebP logo file (Max 5MB). This image will represent your brand across all chatbot channels.'
+                          : 'قم برفع صورة الشعار المخصص لمقرك أو براندك بصيغة PNG أو JPG. تظهر هذه الصورة لعملائك في الشات بوت والـ Widget.'}
+                      </p>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="flex gap-2">
