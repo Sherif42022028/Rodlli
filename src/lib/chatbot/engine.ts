@@ -43,15 +43,36 @@ export class ChatbotEngine {
     this.merchantId = merchantId
   }
 
+  private normalizeArabicText(text: string): string {
+    if (!text) return ''
+    let norm = text.toLowerCase().trim()
+    norm = norm.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?]/g, ' ')
+    norm = norm.replace(/[أإآ]/g, 'ا')
+    norm = norm.replace(/ة/g, 'ه')
+    norm = norm.replace(/ى/g, 'ي')
+    norm = norm.replace(/ـ/g, '')
+    return norm
+  }
+
   private matchesKeywords(message: string, keywords: string[]): boolean {
-    const msg = message.toLowerCase()
-    const words = msg.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?]/g, "").split(/\s+/)
+    const rawMsg = message.toLowerCase()
+    const normMsg = this.normalizeArabicText(message)
+    const words = normMsg.split(/\s+/).filter(Boolean)
+    const strippedWords = words.map(w => w.replace(/^(ال|و|ب|ف|ل|ك)/, ''))
+
     return keywords.some((kw) => {
-      const kwLower = kw.toLowerCase()
-      if (kwLower.includes(' ')) {
-        return msg.includes(kwLower)
+      const rawKw = kw.toLowerCase()
+      const normKw = this.normalizeArabicText(kw)
+      const strippedKw = normKw.replace(/^(ال|و|ب|ف|ل|ك)/, '')
+
+      if (rawKw.includes(' ') || normKw.includes(' ')) {
+        return rawMsg.includes(rawKw) || normMsg.includes(normKw)
       }
-      return words.includes(kwLower)
+      return (
+        words.includes(normKw) ||
+        strippedWords.includes(strippedKw) ||
+        rawMsg.includes(rawKw)
+      )
     })
   }
 
@@ -371,18 +392,20 @@ export class ChatbotEngine {
   ): Promise<ChatbotResponse> {
     const businessName = await this.getMerchantName()
     const systemInstruction = `
-      You are an expert sales assistant for the store "${businessName}" (ID: ${this.merchantId}).
-      You must ONLY answer based on data retrieved from the tools. Do NOT hallucinate prices or details.
+      You are an intelligent, engaging, and expert AI sales assistant for the store "${businessName}" (ID: ${this.merchantId}).
       
-      Response Format Guidelines:
-      1. You must respond in JSON matching this schema:
-         {
-           "reply": "your text response goes here",
-           "confident": true/false
-         }
-      2. If the user query is outside the scope of the store data or the tools do not return matching info, set "confident" to false. Set "reply" to an apology stating you don't have this info.
-      3. If product or service details contain extra attributes (like colors, sizes, ingredients, allergens, portion size, model, warranty, specs, service duration, or available times/days), include them naturally in your response. If an attribute is missing, do not mention it.
-      4. Respond concisely (maximum 2-3 sentences) in the same language as the user query.
+      CORE INSTRUCTIONS:
+      1. INTENT REASONING: Analyze the customer's true underlying request regardless of phrasing (Egyptian Arabic, Standard Arabic, English, or slang).
+      2. GENERAL CATALOG INQUIRIES: If the customer asks generally about products, items for sale, catalog, menu, or variations like ("ما هي المنتجات الموجودة؟", "عندكم إيه؟", "وريني الشغل", "إيه المنتجات المتوفرة؟", "show catalog", "what do you sell?"), MUST call \`searchProducts\` with query '' or 'all' to fetch the store catalog.
+      3. TOOL-BASED ACCURACY: Base your answers ONLY on data returned by the tools. Do NOT hallucinate prices or non-existent items.
+      4. NATURAL ENGAGEMENT: Formulate warm, charming, and helpful responses that directly answer the user's intent. Include product prices, attributes (colors, sizes, specs), or status when available.
+      
+      RESPONSE FORMAT (MUST BE VALID JSON):
+      {
+        "reply": "Your friendly text response here",
+        "confident": true
+      }
+      If tools return empty data or if the query is unrelated to the store, set "confident": false and write an apologetic reply.
     `
 
     const messages: Array<{ role: 'user' | 'assistant'; content: string }> = []

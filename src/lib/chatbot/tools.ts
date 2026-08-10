@@ -4,22 +4,49 @@ import { sql } from 'drizzle-orm'
 // 1. Search products
 export async function searchProducts(query: string, merchantId: string) {
   try {
-    const searchPattern = `%${query}%`
-    const result = await db.execute(
+    const cleanQuery = (query || '').trim().toLowerCase()
+    
+    // Check if query is generic/broad (e.g. asking for all products, catalog, menu, items)
+    const isGenericQuery = !cleanQuery || 
+      cleanQuery === 'menu' || 
+      cleanQuery === 'all' || 
+      cleanQuery === '*' ||
+      /^(منتجات|المنتجات|منيو|المنيو|كتالوج|الكتالوج|كل|عرض|أصناف|الاصناف|بضاعة|البضاعة|عايز|عندكم|موجود|products|catalog|menu|all|show|list)$/i.test(cleanQuery) ||
+      cleanQuery.includes('ما هي المنتجات') ||
+      cleanQuery.includes('الموجودة') ||
+      cleanQuery.includes('عندكم ايه')
+
+    if (!isGenericQuery) {
+      const searchPattern = `%${cleanQuery}%`
+      const result = await db.execute(
+        sql`SELECT id, name, price, description, image_urls, colors, sizes, category_name, product_type, in_stock, availability, extra_attributes 
+            FROM products 
+            WHERE merchant_id = ${merchantId} AND is_active = true 
+              AND (
+                name ILIKE ${searchPattern} 
+                OR description ILIKE ${searchPattern} 
+                OR colors ILIKE ${searchPattern} 
+                OR sizes ILIKE ${searchPattern}
+                OR category_name ILIKE ${searchPattern}
+                OR extra_attributes::text ILIKE ${searchPattern}
+              )
+            LIMIT 10`
+      )
+      const rows = result.rows as unknown as any[]
+      if (rows && rows.length > 0) {
+        return rows
+      }
+    }
+
+    // Fallback: If specific search string returned 0 items OR if it's a broad catalog query, return active catalog items
+    const allResult = await db.execute(
       sql`SELECT id, name, price, description, image_urls, colors, sizes, category_name, product_type, in_stock, availability, extra_attributes 
           FROM products 
           WHERE merchant_id = ${merchantId} AND is_active = true 
-            AND (
-              name ILIKE ${searchPattern} 
-              OR description ILIKE ${searchPattern} 
-              OR colors ILIKE ${searchPattern} 
-              OR sizes ILIKE ${searchPattern}
-              OR category_name ILIKE ${searchPattern}
-              OR extra_attributes::text ILIKE ${searchPattern}
-            )
-          LIMIT 5`
+          ORDER BY created_at DESC 
+          LIMIT 10`
     )
-    return result.rows as unknown as any[]
+    return allResult.rows as unknown as any[]
   } catch (error) {
     console.error('searchProducts tool error:', error)
     return []
@@ -46,15 +73,32 @@ export async function getProductDetails(productId: string) {
 // 3. Search FAQs
 export async function getFAQAnswer(topic: string, merchantId: string) {
   try {
-    const searchPattern = `%${topic}%`
+    const cleanTopic = (topic || '').trim().toLowerCase()
+    if (!cleanTopic) {
+      const allFaqs = await db.execute(
+        sql`SELECT question, answer FROM faqs WHERE merchant_id = ${merchantId} LIMIT 10`
+      )
+      return allFaqs.rows as unknown as any[]
+    }
+
+    const searchPattern = `%${cleanTopic}%`
     const result = await db.execute(
       sql`SELECT question, answer 
           FROM faqs 
           WHERE merchant_id = ${merchantId} 
             AND (question ILIKE ${searchPattern} OR answer ILIKE ${searchPattern})
-          LIMIT 3`
+          LIMIT 5`
     )
-    return result.rows as unknown as any[]
+    const rows = result.rows as unknown as any[]
+    if (rows && rows.length > 0) {
+      return rows
+    }
+
+    // Fallback: If specific topic search yielded 0 rows, return store FAQs for AI reasoning
+    const fallbackFaqs = await db.execute(
+      sql`SELECT question, answer FROM faqs WHERE merchant_id = ${merchantId} LIMIT 10`
+    )
+    return fallbackFaqs.rows as unknown as any[]
   } catch (error) {
     console.error('getFAQAnswer tool error:', error)
     return []
