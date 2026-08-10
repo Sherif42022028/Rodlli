@@ -239,3 +239,21 @@ CREATE TABLE IF NOT EXISTS buyer_interests (
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE(buyer_id, category_id)
 );
+
+-- ============================================
+-- 17. PROVIDER_LOGS
+-- ============================================
+CREATE TABLE IF NOT EXISTS provider_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    merchant_id UUID REFERENCES merchants(id) ON DELETE CASCADE,
+    conversation_id UUID REFERENCES conversations(id) ON DELETE CASCADE,
+    provider VARCHAR(50) NOT NULL,
+    model VARCHAR(100),
+    latency_ms INTEGER NOT NULL,
+    status VARCHAR(20) NOT NULL, -- 'success' | 'fallback' | 'error'
+    error_reason TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_provider_logs_merchant_created ON provider_logs (merchant_id, created_at DESC);
+

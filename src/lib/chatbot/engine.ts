@@ -6,6 +6,7 @@ import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { z } from 'zod'
 import { searchProducts, getProductDetails, getFAQAnswer, checkWorkingHours, checkOrderStatus } from './tools'
 import { searchOramaHybrid } from '@/lib/orama/engine'
+import { LLMRouter } from './llm-router'
 
 export function formatWhatsAppPhone(phone: string): string {
   if (!phone) return ''
@@ -253,19 +254,18 @@ export class ChatbotEngine {
       console.error('Orama Hybrid Search error in engine:', e)
     }
 
-    // Layer 2: AI Layer (Zhipu GLM / Gemini Function Calling)
+    // Layer 2: Dual-Provider AI Layer (Groq Primary -> GLM Fallback -> Gemini Fallback)
     let fallbackResponse: ChatbotResponse = localResult
 
-    const zhipuApiKey = process.env.ZHIPU_API_KEY
-    if (zhipuApiKey) {
+    if (process.env.GROQ_API_KEY || process.env.ZHIPU_API_KEY || process.env.GLM_API_KEY) {
       try {
-        const aiResult = await this.processMessageWithZhipu(userMessage, language, zhipuApiKey, conversationId)
+        const aiResult = await this.processMessageWithRouter(userMessage, language, conversationId)
         if (aiResult.confident) {
           return aiResult
         }
         fallbackResponse = aiResult
       } catch (error) {
-        console.error('Zhipu AI processing failed, falling back to Gemini/local engine:', error)
+        console.error('LLMRouter processing failed, falling back to Gemini/local engine:', error)
       }
     }
 
@@ -360,6 +360,72 @@ export class ChatbotEngine {
           return res
         }
       })
+    }
+  }
+
+  // 0. Dual-Provider Router (Groq Primary -> GLM Fallback)
+  private async processMessageWithRouter(
+    userMessage: string,
+    language: 'en' | 'ar',
+    conversationId?: string | null
+  ): Promise<ChatbotResponse> {
+    const businessName = await this.getMerchantName()
+    const systemInstruction = `
+      You are an expert sales assistant for the store "${businessName}" (ID: ${this.merchantId}).
+      You must ONLY answer based on data retrieved from the tools. Do NOT hallucinate prices or details.
+      
+      Response Format Guidelines:
+      1. You must respond in JSON matching this schema:
+         {
+           "reply": "your text response goes here",
+           "confident": true/false
+         }
+      2. If the user query is outside the scope of the store data or the tools do not return matching info, set "confident" to false. Set "reply" to an apology stating you don't have this info.
+      3. If product or service details contain extra attributes (like colors, sizes, ingredients, allergens, portion size, model, warranty, specs, service duration, or available times/days), include them naturally in your response. If an attribute is missing, do not mention it.
+      4. Respond concisely (maximum 2-3 sentences) in the same language as the user query.
+    `
+
+    const messages: Array<{ role: 'user' | 'assistant'; content: string }> = []
+
+    if (conversationId) {
+      const history = await this.getConversationHistory(conversationId)
+      for (const m of history) {
+        messages.push({
+          role: m.sender_type === 'bot' ? 'assistant' : 'user',
+          content: m.content
+        })
+      }
+    }
+
+    messages.push({ role: 'user', content: userMessage })
+
+    const routerResult = await LLMRouter.generateLLMReply({
+      merchantId: this.merchantId,
+      conversationId,
+      systemInstruction,
+      messages,
+      tools: this.getVercelAITools(conversationId)
+    })
+
+    if (!routerResult.confident) {
+      await this.logUnansweredQuestion(userMessage, conversationId)
+      return {
+        text: language === 'en'
+          ? "I have logged your question for the store support team. They will reply shortly!"
+          : "لقد قمت بنقل استفسارك لفريق دعم المتجر، وسيتم الرد عليك قريباً!",
+        type: 'text',
+        confident: false
+      }
+    }
+
+    return {
+      text: routerResult.text,
+      type: 'text',
+      confident: true,
+      quickReplies: [
+        { text: "Products Catalog", textAr: "كتالوج المنتجات", action: 'show_menu' },
+        { text: "Business Hours", textAr: "مواعيد العمل", action: 'show_hours' }
+      ]
     }
   }
 
